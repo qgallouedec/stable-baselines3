@@ -575,7 +575,7 @@ class OffPolicyAlgorithm(BaseAlgorithm):
 
             # Rescale and perform action
             new_obs, rewards, dones, infos = env.step(actions)
-            _use_random_action = infos[0].get("done", False) or use_random_action
+            _use_random_action = infos[0].get("use_random_action", False) or use_random_action
 
             self.num_timesteps += env.num_envs
             num_collected_steps += 1
