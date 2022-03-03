@@ -208,7 +208,7 @@ class TD3(OffPolicyAlgorithm):
         tb_log_name: str = "TD3",
         eval_log_path: Optional[str] = None,
         reset_num_timesteps: bool = True,
-        use_random_action: bool = False,
+        use_random_action: Optional[np.ndarray] = None,
     ) -> OffPolicyAlgorithm:
 
         return super(TD3, self).learn(

@@ -1,5 +1,6 @@
 from typing import Any, Dict, Optional, Tuple, Type, Union
 
+import numpy as np
 import torch as th
 
 from stable_baselines3.common.buffers import ReplayBuffer
@@ -125,7 +126,7 @@ class DDPG(TD3):
         tb_log_name: str = "DDPG",
         eval_log_path: Optional[str] = None,
         reset_num_timesteps: bool = True,
-        use_random_action: bool = False,
+        use_random_action: Optional[np.ndarray] = None,
     ) -> OffPolicyAlgorithm:
 
         return super(DDPG, self).learn(
