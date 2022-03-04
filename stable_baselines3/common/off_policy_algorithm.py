@@ -403,7 +403,10 @@ class OffPolicyAlgorithm(BaseAlgorithm):
         # exploration phase
         if use_random_action is not None and use_random_action.any():
             for env_idx in np.where(use_random_action)[0]:
-                unscaled_action[env_idx] = self.action_space.sample()
+                action = self.action_space.sample()
+                unscaled_action[env_idx] = 0.5 * self._last_action[env_idx] + 0.5 * action
+
+        self._last_action = unscaled_action
 
         # Rescale the action from [low, high] to [-1, 1]
         if isinstance(self.action_space, gym.spaces.Box):
