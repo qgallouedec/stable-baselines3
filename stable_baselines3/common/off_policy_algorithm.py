@@ -389,7 +389,8 @@ class OffPolicyAlgorithm(BaseAlgorithm):
 
         for env_idx in range(self.n_envs):
             if action_repeat[env_idx] is not None:
-                unscaled_action = 0.1 * unscaled_action[env_idx] + 0.9 * action_repeat[env_idx]
+                if np.random.random() > 0.1:
+                    unscaled_action[env_idx] = action_repeat[env_idx]
 
         # Rescale the action from [low, high] to [-1, 1]
         if isinstance(self.action_space, gym.spaces.Box):
@@ -558,7 +559,7 @@ class OffPolicyAlgorithm(BaseAlgorithm):
                 self.actor.reset_noise(env.num_envs)
 
             # Select action randomly or according to policy
-            actions, buffer_actions = self._sample_action(learning_starts, action_noise, env.num_envs, self._action_repeat)
+            actions, buffer_actions = self._sample_action(learning_starts, self._action_repeat, action_noise, env.num_envs)
 
             # Rescale and perform action
             new_obs, rewards, dones, infos = env.step(actions)
