@@ -68,21 +68,27 @@ class HerReplayBuffer(DictReplayBuffer):
             handle_timeout_termination=handle_timeout_termination,
         )
         self.env = env
-        self.n_sampled_goal = n_sampled_goal
-        # compute ratio between HER replays and regular replays in percent for online HER sampling
-        self.her_ratio = 1 - (1.0 / (self.n_sampled_goal + 1))
-        self.infos = np.array([[{} for _ in range(self.n_envs)] for _ in range(self.buffer_size)])
 
+        # convert goal_selection_strategy into GoalSelectionStrategy if string
         if isinstance(goal_selection_strategy, str):
-            goal_selection_strategy = KEY_TO_GOAL_STRATEGY[goal_selection_strategy.lower()]
+            self.goal_selection_strategy = KEY_TO_GOAL_STRATEGY[goal_selection_strategy.lower()]
+        else:
+            self.goal_selection_strategy = goal_selection_strategy
+
         # check if goal_selection_strategy is valid
         assert isinstance(
-            goal_selection_strategy, GoalSelectionStrategy
+            self.goal_selection_strategy, GoalSelectionStrategy
         ), f"Invalid goal selection strategy, please use one of {list(GoalSelectionStrategy)}"
-        self.goal_selection_strategy = goal_selection_strategy
+
+        self.n_sampled_goal = n_sampled_goal
+        # if we sample her transitions online use custom replay buffer
         self.online_sampling = online_sampling
         if not self.online_sampling:
             assert n_envs == 1, "Offline sampling is not compatible with multiprocessing."
+        # compute ratio between HER replays and regular replays in percent for online HER sampling
+        self.her_ratio = 1 - (1.0 / (self.n_sampled_goal + 1))
+        
+        self.infos = np.array([[{} for _ in range(self.n_envs)] for _ in range(self.buffer_size)])
 
         self.ep_start = np.zeros((self.buffer_size, self.n_envs), dtype=np.int64)
         self._current_ep_start = np.zeros(self.n_envs, dtype=np.int64)
