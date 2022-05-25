@@ -177,16 +177,34 @@ class OffPolicyAlgorithm(BaseAlgorithm):
             else:
                 self.replay_buffer_class = ReplayBuffer
 
+        elif self.replay_buffer_class == HerReplayBuffer:
+            assert self.env is not None, "You must pass an environment when using `HerReplayBuffer`"
+
+            # If using offline sampling, we need a classic replay buffer too
+            if self.replay_buffer_kwargs.get("online_sampling", True):
+                replay_buffer = None
+            else:
+                replay_buffer = DictReplayBuffer(
+                    self.buffer_size,
+                    self.observation_space,
+                    self.action_space,
+                    device=self.device,
+                    optimize_memory_usage=self.optimize_memory_usage,
+                )
+
+            self.replay_buffer = HerReplayBuffer(
+                self.env,
+                self.buffer_size,
+                device=self.device,
+                replay_buffer=replay_buffer,
+                **self.replay_buffer_kwargs,
+            )
+
         if self.replay_buffer is None:
-            args = ()
-            if issubclass(self.replay_buffer_class, HerReplayBuffer):
-                assert self.env is not None, "You must pass an environment when using `HerReplayBuffer`"
-                args = (self.env,)
             self.replay_buffer = self.replay_buffer_class(
                 self.buffer_size,
                 self.observation_space,
                 self.action_space,
-                *args,
                 device=self.device,
                 n_envs=self.n_envs,
                 optimize_memory_usage=self.optimize_memory_usage,
@@ -261,7 +279,12 @@ class OffPolicyAlgorithm(BaseAlgorithm):
         # when using memory efficient replay buffer
         # see https://github.com/DLR-RM/stable-baselines3/issues/46
 
-        replay_buffer = self.replay_buffer
+        # Special case when using HerReplayBuffer,
+        # the classic replay buffer is inside it when using offline sampling
+        if isinstance(self.replay_buffer, HerReplayBuffer):
+            replay_buffer = self.replay_buffer.replay_buffer
+        else:
+            replay_buffer = self.replay_buffer
 
         truncate_last_traj = (
             self.optimize_memory_usage
@@ -549,8 +572,8 @@ class OffPolicyAlgorithm(BaseAlgorithm):
 
         callback.on_rollout_start()
         continue_training = True
-        while should_collect_more_steps(train_freq, num_collected_steps, num_collected_episodes):
 
+        while should_collect_more_steps(train_freq, num_collected_steps, num_collected_episodes):
             if self.use_sde and self.sde_sample_freq > 0 and num_collected_steps % self.sde_sample_freq == 0:
                 # Sample a new noise matrix
                 self.actor.reset_noise(env.num_envs)
