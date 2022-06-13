@@ -131,6 +131,7 @@ class OffPolicyAlgorithm(BaseAlgorithm):
             replay_buffer_kwargs = {}
         self.replay_buffer_kwargs = replay_buffer_kwargs
         self._episode_storage = None
+        self._action_repeat = [None for _ in range(self.n_envs)]
 
         # Save train freq parameter, will be converted later to TrainFreq object
         self.train_freq = train_freq
@@ -353,6 +354,7 @@ class OffPolicyAlgorithm(BaseAlgorithm):
     def _sample_action(
         self,
         learning_starts: int,
+        action_repeat: List[Union[np.ndarray, None]],
         action_noise: Optional[ActionNoise] = None,
         n_envs: int = 1,
     ) -> Tuple[np.ndarray, np.ndarray]:
@@ -366,6 +368,7 @@ class OffPolicyAlgorithm(BaseAlgorithm):
             Required for deterministic policy (e.g. TD3). This can also be used
             in addition to the stochastic policy for SAC.
         :param learning_starts: Number of steps before learning for the warm-up phase.
+        :param action_repeat: Previous action, used for consistant exploration
         :param n_envs:
         :return: action to take in the environment
             and scaled action that will be stored in the replay buffer.
@@ -380,6 +383,11 @@ class OffPolicyAlgorithm(BaseAlgorithm):
             # we assume that the policy uses tanh to scale the action
             # We use non-deterministic action in the case of SAC, for TD3, it does not matter
             unscaled_action, _ = self.predict(self._last_obs, deterministic=False)
+
+        for env_idx in range(self.n_envs):
+            if action_repeat[env_idx] is not None:
+                if np.random.random() > 0.1:
+                    unscaled_action[env_idx] = action_repeat[env_idx]
 
         # Rescale the action from [low, high] to [-1, 1]
         if isinstance(self.action_space, gym.spaces.Box):
@@ -541,17 +549,18 @@ class OffPolicyAlgorithm(BaseAlgorithm):
 
         callback.on_rollout_start()
         continue_training = True
-        while should_collect_more_steps(train_freq, num_collected_steps, num_collected_episodes):
 
+        while should_collect_more_steps(train_freq, num_collected_steps, num_collected_episodes):
             if self.use_sde and self.sde_sample_freq > 0 and num_collected_steps % self.sde_sample_freq == 0:
                 # Sample a new noise matrix
                 self.actor.reset_noise(env.num_envs)
 
             # Select action randomly or according to policy
-            actions, buffer_actions = self._sample_action(learning_starts, action_noise, env.num_envs)
+            actions, buffer_actions = self._sample_action(learning_starts, self._action_repeat, action_noise, env.num_envs)
 
             # Rescale and perform action
             new_obs, rewards, dones, infos = env.step(actions)
+            self._action_repeat = [info.get("action_repeat") for info in infos]
 
             self.num_timesteps += env.num_envs
             num_collected_steps += 1
