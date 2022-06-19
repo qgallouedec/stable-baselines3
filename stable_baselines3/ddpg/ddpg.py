@@ -79,7 +79,7 @@ class DDPG(TD3):
         _init_setup_model: bool = True,
     ):
 
-        super(DDPG, self).__init__(
+        super().__init__(
             policy=policy,
             env=env,
             learning_rate=learning_rate,
@@ -129,7 +129,7 @@ class DDPG(TD3):
         use_random_action: Optional[np.ndarray] = None,
     ) -> OffPolicyAlgorithm:
 
-        return super(DDPG, self).learn(
+        return super().learn(
             total_timesteps=total_timesteps,
             callback=callback,
             log_interval=log_interval,
