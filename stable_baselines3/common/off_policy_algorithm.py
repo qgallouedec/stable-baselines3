@@ -145,6 +145,7 @@ class OffPolicyAlgorithm(BaseAlgorithm):
         self.use_sde_at_warmup = use_sde_at_warmup
         # For random actions
         self._use_random_action = np.zeros(self.n_envs, dtype=bool)
+        self.surgeon = None
 
     def _convert_train_freq(self) -> None:
         """
