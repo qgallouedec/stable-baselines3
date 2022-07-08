@@ -540,7 +540,6 @@ class BaseAlgorithm(ABC):
         n_eval_episodes: int = 5,
         eval_log_path: Optional[str] = None,
         reset_num_timesteps: bool = True,
-        use_random_action: Optional[np.ndarray] = None,
     ) -> "BaseAlgorithm":
         """
         Return a trained model.
@@ -554,8 +553,6 @@ class BaseAlgorithm(ABC):
         :param n_eval_episodes: Number of episode to evaluate the agent
         :param eval_log_path: Path to a folder where the evaluations will be saved
         :param reset_num_timesteps: whether or not to reset the current timestep number (used in logging)
-        :param use_random_action: If True, the actions are random (i.e. not sampled with the actor).
-            None is equivalement to False for all envs.
         :return: the trained model
         """
 
@@ -698,6 +695,7 @@ class BaseAlgorithm(ABC):
             to avoid unexpected behavior.
             See https://github.com/DLR-RM/stable-baselines3/issues/597
         :param kwargs: extra arguments to change the model when loading
+        :return: new model instance with loaded parameters
         """
         if print_system_info:
             print("== CURRENT SYSTEM INFO ==")

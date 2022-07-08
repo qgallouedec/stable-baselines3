@@ -87,7 +87,6 @@ class HerReplayBuffer(DictReplayBuffer):
             assert n_envs == 1, "Offline sampling is not compatible with multiprocessing."
         # compute ratio between HER replays and regular replays in percent for online HER sampling
         self.her_ratio = 1 - (1.0 / (self.n_sampled_goal + 1))
-        
         self.infos = np.array([[{} for _ in range(self.n_envs)] for _ in range(self.buffer_size)])
 
         self.ep_start = np.zeros((self.buffer_size, self.n_envs), dtype=np.int64)
@@ -192,11 +191,6 @@ class HerReplayBuffer(DictReplayBuffer):
         # sample incomplete episode transitions, so we have to eliminate some indexes.
         all_inds = np.tile(np.arange(self.buffer_size), (self.n_envs, 1)).T
         is_valid = self.ep_length > 0
-        # Special case when using the "future" goal sampling strategy, we cannot
-        # sample all transitions, we restrict the sampling domain to non-final transitions
-        if self.goal_selection_strategy == GoalSelectionStrategy.FUTURE:
-            is_last = all_inds == (self.ep_start + self.ep_length - 1) % self.buffer_size
-            is_valid = np.logical_and(np.logical_not(is_last), is_valid)
 
         valid_inds = [np.arange(self.buffer_size)[is_valid[:, env_idx]] for env_idx in range(self.n_envs)]
         for i, env_idx in enumerate(env_indices):
@@ -391,7 +385,7 @@ class HerReplayBuffer(DictReplayBuffer):
         elif self.goal_selection_strategy == GoalSelectionStrategy.FUTURE:
             # replay with random state which comes from the same episode and was observed after current transition
             current_indices_in_episode = batch_inds - batch_ep_start
-            transition_indices_in_episode = np.random.randint(current_indices_in_episode + 1, batch_ep_length)
+            transition_indices_in_episode = np.random.randint(current_indices_in_episode, batch_ep_length)
 
         elif self.goal_selection_strategy == GoalSelectionStrategy.EPISODE:
             # replay with random state which comes from the same episode as current transition
@@ -401,7 +395,7 @@ class HerReplayBuffer(DictReplayBuffer):
             raise ValueError(f"Strategy {self.goal_selection_strategy} for sampling goals not supported!")
 
         transition_indices = (transition_indices_in_episode + batch_ep_start) % self.buffer_size
-        return self.observations["achieved_goal"][transition_indices, env_indices]
+        return self.next_observations["achieved_goal"][transition_indices, env_indices]
 
     def truncate_last_trajectory(self) -> None:
         """
