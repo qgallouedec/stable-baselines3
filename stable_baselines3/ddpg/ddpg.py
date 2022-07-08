@@ -1,5 +1,6 @@
 from typing import Any, Dict, Optional, Tuple, Type, Union
 
+import numpy as np
 import torch as th
 
 from stable_baselines3.common.buffers import ReplayBuffer

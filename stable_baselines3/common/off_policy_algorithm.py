@@ -143,6 +143,7 @@ class OffPolicyAlgorithm(BaseAlgorithm):
             self.policy_kwargs["use_sde"] = self.use_sde
         # For gSDE only
         self.use_sde_at_warmup = use_sde_at_warmup
+        self.surgeon = None
 
     def _convert_train_freq(self) -> None:
         """
@@ -383,6 +384,8 @@ class OffPolicyAlgorithm(BaseAlgorithm):
             # we assume that the policy uses tanh to scale the action
             # We use non-deterministic action in the case of SAC, for TD3, it does not matter
             unscaled_action, _ = self.predict(self._last_obs, deterministic=False)
+
+        self._last_action = unscaled_action
 
         for env_idx in range(self.n_envs):
             if action_repeat[env_idx] is not None:

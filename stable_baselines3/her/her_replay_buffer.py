@@ -87,7 +87,6 @@ class HerReplayBuffer(DictReplayBuffer):
             assert n_envs == 1, "Offline sampling is not compatible with multiprocessing."
         # compute ratio between HER replays and regular replays in percent for online HER sampling
         self.her_ratio = 1 - (1.0 / (self.n_sampled_goal + 1))
-
         self.infos = np.array([[{} for _ in range(self.n_envs)] for _ in range(self.buffer_size)])
 
         self.ep_start = np.zeros((self.buffer_size, self.n_envs), dtype=np.int64)
