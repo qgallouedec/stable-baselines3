@@ -318,6 +318,8 @@ class OffPolicyAlgorithm(BaseAlgorithm):
             reset_num_timesteps,
             tb_log_name,
         )
+        if self.surgeon is not None:
+            self.surgeon.setup(self)
 
         callback.on_training_start(locals(), globals())
 
@@ -589,6 +591,9 @@ class OffPolicyAlgorithm(BaseAlgorithm):
             # For SAC/TD3, the update is dones as the same time as the gradient update
             # see https://github.com/hill-a/stable-baselines/issues/900
             self._on_step()
+
+            if self.surgeon is not None:
+                self.surgeon.on_step()
 
             for idx, done in enumerate(dones):
                 if done:
