@@ -8,8 +8,8 @@ from torch.nn import functional as F
 from stable_baselines3.common.buffers import ReplayBuffer
 from stable_baselines3.common.noise import ActionNoise
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
-from stable_baselines3.common.surgeon import Surgeon
 from stable_baselines3.common.policies import BasePolicy
+from stable_baselines3.common.surgeon import Surgeon
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
 from stable_baselines3.common.utils import polyak_update
 from stable_baselines3.td3.policies import CnnPolicy, MlpPolicy, MultiInputPolicy, TD3Policy
@@ -135,6 +135,8 @@ class TD3(OffPolicyAlgorithm):
     def _setup_model(self) -> None:
         super()._setup_model()
         self._create_aliases()
+        if self.surgeon is not None:
+            self.actor.optimizer.add_param_group({"params": self.surgeon.parameters()})
 
     def _create_aliases(self) -> None:
         self.actor = self.policy.actor
@@ -187,7 +189,7 @@ class TD3(OffPolicyAlgorithm):
                 # Compute actor loss
                 actor_loss = -self.critic.q1_forward(replay_data.observations, self.actor(replay_data.observations)).mean()
                 if self.surgeon is not None:
-                    actor_loss = self.surgeon.modify_loss(actor_loss, replay_data)
+                    actor_loss = self.surgeon.modify_actor_loss(actor_loss, replay_data)
                 actor_losses.append(actor_loss.item())
 
                 # Optimize the actor
