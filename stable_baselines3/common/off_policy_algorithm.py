@@ -395,6 +395,8 @@ class OffPolicyAlgorithm(BaseAlgorithm):
             if action_repeat[env_idx] is not None:
                 if np.random.random() > 0.1:
                     unscaled_action[env_idx] = action_repeat[env_idx]
+                else:
+                    unscaled_action[env_idx] = self.action_space.sample()
 
         # Rescale the action from [low, high] to [-1, 1]
         if isinstance(self.action_space, gym.spaces.Box):
