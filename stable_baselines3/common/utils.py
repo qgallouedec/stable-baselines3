@@ -2,9 +2,9 @@ import glob
 import os
 import platform
 import random
-from collections import deque
+import warnings
 from itertools import zip_longest
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 import gym
 import numpy as np
@@ -14,12 +14,14 @@ import stable_baselines3 as sb3
 
 # Check if tensorboard is available for pytorch
 try:
-    from torch.utils.tensorboard import SummaryWriter
+    import torch.utils.tensorboard
 except ImportError:
     SummaryWriter = None
+else:
+    SummaryWriter = torch.utils.tensorboard.SummaryWriter
 
 from stable_baselines3.common.logger import Logger, configure
-from stable_baselines3.common.type_aliases import GymEnv, Schedule, TensorDict, TrainFreq, TrainFrequencyUnit
+from stable_baselines3.common.type_aliases import GymEnv, GymObs, Schedule, TensorDict, TrainFreq, TrainFrequencyUnit
 
 
 def set_random_seed(seed: int, using_cuda: bool = False) -> None:
@@ -311,7 +313,7 @@ def is_vectorized_multibinary_observation(observation: np.ndarray, observation_s
         )
 
 
-def is_vectorized_dict_observation(observation: np.ndarray, observation_space: gym.spaces.Dict) -> bool:
+def is_vectorized_dict_observation(observation: Dict[str, np.ndarray], observation_space: gym.spaces.Dict) -> bool:
     """
     For dict observation type, detects and validates the shape,
     then returns whether or not the observation is vectorized.
@@ -355,7 +357,7 @@ def is_vectorized_dict_observation(observation: np.ndarray, observation_space: g
         )
 
 
-def is_vectorized_observation(observation: Union[int, np.ndarray], observation_space: gym.spaces.Space) -> bool:
+def is_vectorized_observation(observation: GymObs, observation_space: gym.spaces.Space) -> bool:
     """
     For every observation type, detects and validates the shape,
     then returns whether or not the observation is vectorized.
@@ -365,23 +367,26 @@ def is_vectorized_observation(observation: Union[int, np.ndarray], observation_s
     :return: whether the given observation is vectorized or not
     """
 
-    is_vec_obs_func_dict = {
-        gym.spaces.Box: is_vectorized_box_observation,
-        gym.spaces.Discrete: is_vectorized_discrete_observation,
-        gym.spaces.MultiDiscrete: is_vectorized_multidiscrete_observation,
-        gym.spaces.MultiBinary: is_vectorized_multibinary_observation,
-        gym.spaces.Dict: is_vectorized_dict_observation,
-    }
-
-    for space_type, is_vec_obs_func in is_vec_obs_func_dict.items():
-        if isinstance(observation_space, space_type):
-            return is_vec_obs_func(observation, observation_space)
+    if isinstance(observation_space, gym.spaces.Box):
+        assert isinstance(observation, np.ndarray)  # assert checks mainly to help mypy
+        return is_vectorized_box_observation(observation, observation_space)
+    elif isinstance(observation_space, gym.spaces.Discrete):
+        assert isinstance(observation, (int, np.ndarray))
+        return is_vectorized_discrete_observation(observation, observation_space)
+    elif isinstance(observation_space, gym.spaces.MultiDiscrete):
+        assert isinstance(observation, np.ndarray)
+        return is_vectorized_multidiscrete_observation(observation, observation_space)
+    elif isinstance(observation_space, gym.spaces.MultiBinary):
+        assert isinstance(observation, np.ndarray)
+        return is_vectorized_multibinary_observation(observation, observation_space)
+    elif isinstance(observation_space, gym.spaces.Dict):
+        assert isinstance(observation, dict)
+        return is_vectorized_dict_observation(observation, observation_space)
     else:
-        # for-else happens if no break is called
         raise ValueError(f"Error: Cannot determine if the observation is vectorized with the space type {observation_space}.")
 
 
-def safe_mean(arr: Union[np.ndarray, list, deque]) -> np.ndarray:
+def safe_mean(arr: Sequence[float]) -> np.floating:
     """
     Compute the mean of an array if there is at least one element.
     For empty array, return NaN. It is used for logging only.
@@ -389,7 +394,11 @@ def safe_mean(arr: Union[np.ndarray, list, deque]) -> np.ndarray:
     :param arr: Numpy array or list of values
     :return:
     """
-    return np.nan if len(arr) == 0 else np.mean(arr)
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", "Mean of empty slice", category=RuntimeWarning)
+        warnings.filterwarnings("ignore", "invalid value encountered", category=RuntimeWarning)
+        return np.mean(arr)
 
 
 def get_parameters_by_name(model: th.nn.Module, included_names: Iterable[str]) -> List[th.Tensor]:
