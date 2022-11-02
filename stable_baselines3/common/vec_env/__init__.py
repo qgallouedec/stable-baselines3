@@ -1,7 +1,7 @@
 # flake8: noqa F401
 import typing
 from copy import deepcopy
-from typing import Optional, Type, Union
+from typing import Optional, Type, TypeVar
 
 from stable_baselines3.common.vec_env.base_vec_env import CloudpickleWrapper, VecEnv, VecEnvWrapper
 from stable_baselines3.common.vec_env.dummy_vec_env import DummyVecEnv
@@ -19,8 +19,10 @@ from stable_baselines3.common.vec_env.vec_video_recorder import VecVideoRecorder
 if typing.TYPE_CHECKING:
     from stable_baselines3.common.type_aliases import GymEnv
 
+WrapperType = TypeVar("WrapperType", bound=VecEnvWrapper)  # Can be any subtype of VecEnvWrapper
 
-def unwrap_vec_wrapper(env: Union["GymEnv", VecEnv], vec_wrapper_class: Type[VecEnvWrapper]) -> Optional[VecEnvWrapper]:
+
+def unwrap_vec_wrapper(env: "GymEnv", vec_wrapper_class: Type[WrapperType]) -> Optional[WrapperType]:
     """
     Retrieve a ``VecEnvWrapper`` object by recursively searching.
 
@@ -36,15 +38,15 @@ def unwrap_vec_wrapper(env: Union["GymEnv", VecEnv], vec_wrapper_class: Type[Vec
     return None
 
 
-def unwrap_vec_normalize(env: Union["GymEnv", VecEnv]) -> Optional[VecNormalize]:
+def unwrap_vec_normalize(env: "GymEnv") -> Optional[VecNormalize]:
     """
     :param env:
     :return:
     """
-    return unwrap_vec_wrapper(env, VecNormalize)  # pytype:disable=bad-return-type
+    return unwrap_vec_wrapper(env, VecNormalize)
 
 
-def is_vecenv_wrapped(env: Union["GymEnv", VecEnv], vec_wrapper_class: Type[VecEnvWrapper]) -> bool:
+def is_vecenv_wrapped(env: "GymEnv", vec_wrapper_class: Type[VecEnvWrapper]) -> bool:
     """
     Check if an environment is already wrapped by a given ``VecEnvWrapper``.
 
@@ -65,7 +67,9 @@ def sync_envs_normalization(env: "GymEnv", eval_env: "GymEnv") -> None:
     """
     env_tmp, eval_env_tmp = env, eval_env
     while isinstance(env_tmp, VecEnvWrapper):
+        assert isinstance(eval_env_tmp, VecNormalize)
         if isinstance(env_tmp, VecNormalize):
+            assert isinstance(eval_env_tmp, VecNormalize)
             # Only synchronize if observation normalization exists
             if hasattr(env_tmp, "obs_rms"):
                 eval_env_tmp.obs_rms = deepcopy(env_tmp.obs_rms)
