@@ -6,7 +6,7 @@ import numpy as np
 import torch as th
 from gym import spaces
 
-from stable_baselines3.common.preprocessing import get_action_dim, get_obs_shape
+from stable_baselines3.common.preprocessing import get_obs_shape
 from stable_baselines3.common.type_aliases import (
     DictReplayBufferSamples,
     DictRolloutBufferSamples,
@@ -48,7 +48,7 @@ class BaseBuffer(ABC):
         self.action_space = action_space
         self.obs_shape = get_obs_shape(observation_space)
 
-        self.action_dim = get_action_dim(action_space)
+        self.action_shape = get_obs_shape(action_space)
         self.pos = 0
         self.full = False
         self.device = device
@@ -205,7 +205,7 @@ class ReplayBuffer(BaseBuffer):
         else:
             self.next_observations = np.zeros((self.buffer_size, self.n_envs) + self.obs_shape, dtype=observation_space.dtype)
 
-        self.actions = np.zeros((self.buffer_size, self.n_envs, self.action_dim), dtype=action_space.dtype)
+        self.actions = np.zeros((self.buffer_size, self.n_envs) + self.action_shape, dtype=action_space.dtype)
 
         self.rewards = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.dones = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
@@ -247,7 +247,7 @@ class ReplayBuffer(BaseBuffer):
 
         # Same, for actions
         if isinstance(self.action_space, spaces.Discrete):
-            action = action.reshape((self.n_envs, self.action_dim))
+            action = action.reshape((self.n_envs,) + self.action_shape)
 
         # Copy to avoid modification by reference
         self.observations[self.pos] = np.array(obs).copy()
@@ -296,13 +296,13 @@ class ReplayBuffer(BaseBuffer):
         env_indices = np.random.randint(0, high=self.n_envs, size=(len(batch_inds),))
 
         if self.optimize_memory_usage:
-            next_obs = self._normalize_obs(self.observations[(batch_inds + 1) % self.buffer_size, env_indices, :], env)
+            next_obs = self._normalize_obs(self.observations[(batch_inds + 1) % self.buffer_size, env_indices], env)
         else:
-            next_obs = self._normalize_obs(self.next_observations[batch_inds, env_indices, :], env)
+            next_obs = self._normalize_obs(self.next_observations[batch_inds, env_indices], env)
 
         data = (
-            self._normalize_obs(self.observations[batch_inds, env_indices, :], env),
-            self.actions[batch_inds, env_indices, :],
+            self._normalize_obs(self.observations[batch_inds, env_indices], env),
+            self.actions[batch_inds, env_indices],
             next_obs,
             # Only use dones that are not due to timeouts
             # deactivated by default (timeouts is initialized as an array of False)
@@ -357,7 +357,7 @@ class RolloutBuffer(BaseBuffer):
     def reset(self) -> None:
 
         self.observations = np.zeros((self.buffer_size, self.n_envs) + self.obs_shape, dtype=np.float32)
-        self.actions = np.zeros((self.buffer_size, self.n_envs, self.action_dim), dtype=np.float32)
+        self.actions = np.zeros((self.buffer_size, self.n_envs) + self.action_shape, dtype=np.float32)
         self.rewards = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.returns = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.episode_starts = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
@@ -532,7 +532,7 @@ class DictReplayBuffer(ReplayBuffer):
             for key, _obs_shape in self.obs_shape.items()
         }
 
-        self.actions = np.zeros((self.buffer_size, self.n_envs, self.action_dim), dtype=action_space.dtype)
+        self.actions = np.zeros((self.buffer_size, self.n_envs) + self.action_shape, dtype=action_space.dtype)
         self.rewards = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.dones = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
 
@@ -586,7 +586,7 @@ class DictReplayBuffer(ReplayBuffer):
 
         # Same reshape, for actions
         if isinstance(self.action_space, spaces.Discrete):
-            action = action.reshape((self.n_envs, self.action_dim))
+            action = action.reshape((self.n_envs,) + self.action_shape)
 
         self.actions[self.pos] = np.array(action).copy()
         self.rewards[self.pos] = np.array(reward).copy()
@@ -616,9 +616,9 @@ class DictReplayBuffer(ReplayBuffer):
         env_indices = np.random.randint(0, high=self.n_envs, size=(len(batch_inds),))
 
         # Normalize if needed and remove extra dimension (we are using only one env for now)
-        obs_ = self._normalize_obs({key: obs[batch_inds, env_indices, :] for key, obs in self.observations.items()}, env)
+        obs_ = self._normalize_obs({key: obs[batch_inds, env_indices] for key, obs in self.observations.items()}, env)
         next_obs_ = self._normalize_obs(
-            {key: obs[batch_inds, env_indices, :] for key, obs in self.next_observations.items()}, env
+            {key: obs[batch_inds, env_indices] for key, obs in self.next_observations.items()}, env
         )
 
         # Convert to torch tensor
@@ -690,7 +690,7 @@ class DictRolloutBuffer(RolloutBuffer):
         self.observations = {}
         for key, obs_input_shape in self.obs_shape.items():
             self.observations[key] = np.zeros((self.buffer_size, self.n_envs) + obs_input_shape, dtype=np.float32)
-        self.actions = np.zeros((self.buffer_size, self.n_envs, self.action_dim), dtype=np.float32)
+        self.actions = np.zeros((self.buffer_size, self.n_envs) + self.action_shape, dtype=np.float32)
         self.rewards = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.returns = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.episode_starts = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)

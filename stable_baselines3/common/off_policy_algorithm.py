@@ -131,7 +131,8 @@ class OffPolicyAlgorithm(BaseAlgorithm):
             replay_buffer_kwargs = {}
         self.replay_buffer_kwargs = replay_buffer_kwargs
         self._episode_storage = None
-        self._action_repeat = [None for _ in range(self.n_envs)]
+        if self.n_envs is not None:
+            self._action_repeat = [None for _ in range(self.n_envs)]
 
         # Save train freq parameter, will be converted later to TrainFreq object
         self.train_freq = train_freq

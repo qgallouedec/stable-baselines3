@@ -286,8 +286,8 @@ class HerReplayBuffer(DictReplayBuffer):
         :return: Samples
         """
         # Normalize if needed and remove extra dimension (we are using only one env for now)
-        obs_ = self._normalize_obs({key: obs[batch_inds, env_indices, :] for key, obs in self.observations.items()})
-        next_obs_ = self._normalize_obs({key: obs[batch_inds, env_indices, :] for key, obs in self.next_observations.items()})
+        obs_ = self._normalize_obs({key: obs[batch_inds, env_indices] for key, obs in self.observations.items()})
+        next_obs_ = self._normalize_obs({key: obs[batch_inds, env_indices] for key, obs in self.next_observations.items()})
 
         # Convert to torch tensor
         observations = {key: self.to_torch(obs) for key, obs in obs_.items()}
@@ -318,8 +318,8 @@ class HerReplayBuffer(DictReplayBuffer):
         :return: Samples, with new desired goals and new rewards
         """
         # Get infos and obs
-        obs = {key: obs[batch_inds, env_indices, :] for key, obs in self.observations.items()}
-        next_obs = {key: obs[batch_inds, env_indices, :] for key, obs in self.next_observations.items()}
+        obs = {key: obs[batch_inds, env_indices] for key, obs in self.observations.items()}
+        next_obs = {key: obs[batch_inds, env_indices] for key, obs in self.next_observations.items()}
         infos = copy.deepcopy(self.infos[batch_inds, env_indices])
         # Sample and set new goals
         new_goals = self._sample_goals(batch_inds, env_indices)

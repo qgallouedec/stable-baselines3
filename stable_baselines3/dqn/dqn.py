@@ -199,7 +199,7 @@ class DQN(OffPolicyAlgorithm):
             current_q_values = self.q_net(replay_data.observations)
 
             # Retrieve the q-values for the actions from the replay buffer
-            current_q_values = th.gather(current_q_values, dim=1, index=replay_data.actions.long())
+            current_q_values = current_q_values[th.arange(current_q_values.shape[0]), replay_data.actions.long()]
 
             # Compute Huber loss (less sensitive to outliers)
             loss = F.smooth_l1_loss(current_q_values, target_q_values)

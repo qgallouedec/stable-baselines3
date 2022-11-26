@@ -144,7 +144,7 @@ def get_obs_shape(
         return observation_space.shape
     elif isinstance(observation_space, spaces.Discrete):
         # Observation is an int
-        return (1,)
+        return tuple()
     elif isinstance(observation_space, spaces.MultiDiscrete):
         # Number of discrete features
         return (int(len(observation_space.nvec)),)
@@ -188,7 +188,7 @@ def get_action_dim(action_space: spaces.Space) -> int:
         return int(np.prod(action_space.shape))
     elif isinstance(action_space, spaces.Discrete):
         # Action is an int
-        return 1
+        return 0
     elif isinstance(action_space, spaces.MultiDiscrete):
         # Number of discrete actions
         return int(len(action_space.nvec))
