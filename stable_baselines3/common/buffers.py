@@ -306,8 +306,8 @@ class ReplayBuffer(BaseBuffer):
             next_obs,
             # Only use dones that are not due to timeouts
             # deactivated by default (timeouts is initialized as an array of False)
-            (self.dones[batch_inds, env_indices] * (1 - self.timeouts[batch_inds, env_indices])).reshape(-1, 1),
-            self._normalize_reward(self.rewards[batch_inds, env_indices].reshape(-1, 1), env),
+            (self.dones[batch_inds, env_indices] * (1 - self.timeouts[batch_inds, env_indices])),
+            self._normalize_reward(self.rewards[batch_inds, env_indices], env),
         )
         return ReplayBufferSamples(*tuple(map(self.to_torch, data)))
 
@@ -631,10 +631,8 @@ class DictReplayBuffer(ReplayBuffer):
             next_observations=next_observations,
             # Only use dones that are not due to timeouts
             # deactivated by default (timeouts is initialized as an array of False)
-            dones=self.to_torch(self.dones[batch_inds, env_indices] * (1 - self.timeouts[batch_inds, env_indices])).reshape(
-                -1, 1
-            ),
-            rewards=self.to_torch(self._normalize_reward(self.rewards[batch_inds, env_indices].reshape(-1, 1), env)),
+            dones=self.to_torch(self.dones[batch_inds, env_indices] * (1 - self.timeouts[batch_inds, env_indices])),
+            rewards=self.to_torch(self._normalize_reward(self.rewards[batch_inds, env_indices], env)),
         )
 
 

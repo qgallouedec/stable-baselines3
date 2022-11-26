@@ -299,10 +299,8 @@ class HerReplayBuffer(DictReplayBuffer):
             next_observations=next_observations,
             # Only use dones that are not due to timeouts
             # deactivated by default (timeouts is initialized as an array of False)
-            dones=self.to_torch(self.dones[batch_inds, env_indices] * (1 - self.timeouts[batch_inds, env_indices])).reshape(
-                -1, 1
-            ),
-            rewards=self.to_torch(self._normalize_reward(self.rewards[batch_inds, env_indices].reshape(-1, 1), env)),
+            dones=self.to_torch(self.dones[batch_inds, env_indices] * (1 - self.timeouts[batch_inds, env_indices])),
+            rewards=self.to_torch(self._normalize_reward(self.rewards[batch_inds, env_indices], env)),
         )
 
     def _get_virtual_samples(
@@ -361,10 +359,8 @@ class HerReplayBuffer(DictReplayBuffer):
             next_observations=next_observations,
             # Only use dones that are not due to timeouts
             # deactivated by default (timeouts is initialized as an array of False)
-            dones=self.to_torch(self.dones[batch_inds, env_indices] * (1 - self.timeouts[batch_inds, env_indices])).reshape(
-                -1, 1
-            ),
-            rewards=self.to_torch(self._normalize_reward(rewards.reshape(-1, 1), env)),
+            dones=self.to_torch(self.dones[batch_inds, env_indices] * (1 - self.timeouts[batch_inds, env_indices])),
+            rewards=self.to_torch(self._normalize_reward(rewards, env)),
         )
 
     def _sample_goals(self, batch_inds: np.ndarray, env_indices: np.ndarray) -> np.ndarray:
