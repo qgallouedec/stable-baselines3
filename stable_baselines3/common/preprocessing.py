@@ -131,31 +131,29 @@ def preprocess_obs(
         raise NotImplementedError(f"Preprocessing not implemented for {observation_space}")
 
 
-def get_obs_shape(
-    observation_space: spaces.Space,
-) -> Union[Tuple[int, ...], Dict[str, Tuple[int, ...]]]:
+def get_space_shape(space: spaces.Space) -> Union[Tuple[int, ...], Dict[str, Tuple[int, ...]]]:
     """
-    Get the shape of the observation (useful for the buffers).
+    Get the shape of the space (useful for the buffers).
 
-    :param observation_space:
+    :param space:
     :return:
     """
-    if isinstance(observation_space, spaces.Box):
-        return observation_space.shape
-    elif isinstance(observation_space, spaces.Discrete):
+    if isinstance(space, spaces.Box):
+        return space.shape
+    elif isinstance(space, spaces.Discrete):
         # Observation is an int
         return (1,)
-    elif isinstance(observation_space, spaces.MultiDiscrete):
+    elif isinstance(space, spaces.MultiDiscrete):
         # Number of discrete features
-        return (int(len(observation_space.nvec)),)
-    elif isinstance(observation_space, spaces.MultiBinary):
+        return (int(len(space.nvec)),)
+    elif isinstance(space, spaces.MultiBinary):
         # Number of binary features
-        return (int(observation_space.n),)
-    elif isinstance(observation_space, spaces.Dict):
-        return {key: get_obs_shape(subspace) for (key, subspace) in observation_space.spaces.items()}
+        return (int(space.n),)
+    elif isinstance(space, spaces.Dict):
+        return {key: get_space_shape(subspace) for (key, subspace) in space.spaces.items()}
 
     else:
-        raise NotImplementedError(f"{observation_space} observation space is not supported")
+        raise NotImplementedError(f"{space} is not supported")
 
 
 def get_flattened_obs_dim(observation_space: spaces.Space) -> int:

@@ -6,7 +6,7 @@ import numpy as np
 import torch as th
 
 from stable_baselines3.common.buffers import DictReplayBuffer
-from stable_baselines3.common.preprocessing import get_obs_shape
+from stable_baselines3.common.preprocessing import get_space_shape
 from stable_baselines3.common.type_aliases import DictReplayBufferSamples
 from stable_baselines3.common.vec_env import VecEnv, VecNormalize
 from stable_baselines3.her.goal_selection_strategy import KEY_TO_GOAL_STRATEGY, GoalSelectionStrategy
@@ -126,8 +126,8 @@ class HerReplayBuffer(DictReplayBuffer):
         self.episode_steps = 0
 
         # Get shape of observation and goal (usually the same)
-        self.obs_shape = get_obs_shape(self.env.observation_space.spaces["observation"])
-        self.goal_shape = get_obs_shape(self.env.observation_space.spaces["achieved_goal"])
+        self.obs_shape = get_space_shape(self.env.observation_space.spaces["observation"])
+        self.goal_shape = get_space_shape(self.env.observation_space.spaces["achieved_goal"])
 
         # input dimensions for buffer initialization
         input_shape = {
