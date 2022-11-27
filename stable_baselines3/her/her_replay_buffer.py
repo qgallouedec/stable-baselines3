@@ -143,7 +143,9 @@ class HerReplayBuffer(DictReplayBuffer):
         }
         self._observation_keys = ["observation", "achieved_goal", "desired_goal"]
         self._buffer = {
-            key: np.zeros((self.max_episode_stored, self.max_episode_length, *dim), dtype=np.float32)
+            key: np.zeros(
+                (self.max_episode_stored, self.max_episode_length, *dim), dtype=np.float32 if key != "done" else bool
+            )
             for key, dim in input_shape.items()
         }
         # Store info dicts are it can be used to compute the reward (e.g. continuity cost)
@@ -396,7 +398,8 @@ class HerReplayBuffer(DictReplayBuffer):
 
         # Remove termination signals due to timeout
         if self.handle_timeout_termination:
-            done_ = done * (1 - np.array([info.get("TimeLimit.truncated", False) for info in infos]))
+            truncated = np.array([info.get("TimeLimit.truncated", False) for info in infos])
+            done_ = np.logical_and(done, np.logical_not(truncated))
         else:
             done_ = done
 
@@ -524,7 +527,7 @@ class HerReplayBuffer(DictReplayBuffer):
             self.episode_lengths[pos] = current_idx
             # set done = True for current episode
             # current_idx was already incremented
-            self._buffer["done"][pos][current_idx - 1] = np.array([True], dtype=np.float32)
+            self._buffer["done"][pos][current_idx - 1] = np.array([True])
             # reset current transition index
             self.current_idx = 0
             # increment episode counter
