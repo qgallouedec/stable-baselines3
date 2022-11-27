@@ -10,7 +10,7 @@ from gym import spaces
 from torch import nn
 from torch.distributions import Bernoulli, Categorical, Normal
 
-from stable_baselines3.common.preprocessing import get_action_dim
+from stable_baselines3.common.preprocessing import get_space_dim
 
 SelfDistribution = TypeVar("SelfDistribution", bound="Distribution")
 SelfDiagGaussianDistribution = TypeVar("SelfDiagGaussianDistribution", bound="DiagGaussianDistribution")
@@ -675,7 +675,7 @@ def make_proba_distribution(
 
     if isinstance(action_space, spaces.Box):
         cls = StateDependentNoiseDistribution if use_sde else DiagGaussianDistribution
-        return cls(get_action_dim(action_space), **dist_kwargs)
+        return cls(get_space_dim(action_space), **dist_kwargs)
     elif isinstance(action_space, spaces.Discrete):
         return CategoricalDistribution(action_space.n, **dist_kwargs)
     elif isinstance(action_space, spaces.MultiDiscrete):

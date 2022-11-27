@@ -5,7 +5,7 @@ import torch as th
 from torch import nn
 
 from stable_baselines3.common.policies import BasePolicy, ContinuousCritic
-from stable_baselines3.common.preprocessing import get_action_dim
+from stable_baselines3.common.preprocessing import get_space_dim
 from stable_baselines3.common.torch_layers import (
     BaseFeaturesExtractor,
     CombinedExtractor,
@@ -54,7 +54,7 @@ class Actor(BasePolicy):
         self.features_dim = features_dim
         self.activation_fn = activation_fn
 
-        action_dim = get_action_dim(self.action_space)
+        action_dim = get_space_dim(self.action_space)
         actor_net = create_mlp(features_dim, action_dim, net_arch, activation_fn, squash_output=True)
         # Deterministic action
         self.mu = nn.Sequential(*actor_net)

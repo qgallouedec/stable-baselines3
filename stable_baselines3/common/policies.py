@@ -20,7 +20,7 @@ from stable_baselines3.common.distributions import (
     StateDependentNoiseDistribution,
     make_proba_distribution,
 )
-from stable_baselines3.common.preprocessing import get_action_dim, is_image_space, maybe_transpose, preprocess_obs
+from stable_baselines3.common.preprocessing import get_space_dim, is_image_space, maybe_transpose, preprocess_obs
 from stable_baselines3.common.torch_layers import (
     BaseFeaturesExtractor,
     CombinedExtractor,
@@ -840,7 +840,7 @@ class ContinuousCritic(BaseModel):
             normalize_images=normalize_images,
         )
 
-        action_dim = get_action_dim(self.action_space)
+        action_dim = get_space_dim(self.action_space)
 
         self.share_features_extractor = share_features_extractor
         self.n_critics = n_critics

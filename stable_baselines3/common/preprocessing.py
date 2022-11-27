@@ -175,26 +175,26 @@ def get_flattened_obs_dim(observation_space: spaces.Space) -> int:
         return spaces.utils.flatdim(observation_space)
 
 
-def get_action_dim(action_space: spaces.Space) -> int:
+def get_space_dim(space: spaces.Space) -> int:
     """
-    Get the dimension of the action space.
+    Get the dimension of the space.
 
-    :param action_space:
+    :param space:
     :return:
     """
-    if isinstance(action_space, spaces.Box):
-        return int(np.prod(action_space.shape))
-    elif isinstance(action_space, spaces.Discrete):
-        # Action is an int
+    if isinstance(space, spaces.Box):
+        return int(np.prod(space.shape))
+    elif isinstance(space, spaces.Discrete):
+        # Value is an int
         return 1
-    elif isinstance(action_space, spaces.MultiDiscrete):
-        # Number of discrete actions
-        return int(len(action_space.nvec))
-    elif isinstance(action_space, spaces.MultiBinary):
-        # Number of binary actions
-        return int(action_space.n)
+    elif isinstance(space, spaces.MultiDiscrete):
+        # Number of discrete values
+        return int(len(space.nvec))
+    elif isinstance(space, spaces.MultiBinary):
+        # Number of binary values
+        return int(space.n)
     else:
-        raise NotImplementedError(f"{action_space} action space is not supported")
+        raise NotImplementedError(f"{space} is not supported")
 
 
 def check_for_nested_spaces(obs_space: spaces.Space):

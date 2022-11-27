@@ -6,7 +6,7 @@ import numpy as np
 import torch as th
 from gym import spaces
 
-from stable_baselines3.common.preprocessing import get_action_dim, get_space_shape
+from stable_baselines3.common.preprocessing import get_space_dim, get_space_shape
 from stable_baselines3.common.type_aliases import (
     DictReplayBufferSamples,
     DictRolloutBufferSamples,
@@ -49,7 +49,7 @@ class BaseBuffer(ABC):
         self.action_space = action_space
         self.obs_shape = get_space_shape(observation_space)
 
-        self.action_dim = get_action_dim(action_space)
+        self.action_dim = get_space_dim(action_space)
         self.pos = 0
         self.full = False
         self.device = get_device(device)

@@ -6,7 +6,7 @@ from torch import nn
 
 from stable_baselines3.common.distributions import SquashedDiagGaussianDistribution, StateDependentNoiseDistribution
 from stable_baselines3.common.policies import BasePolicy, ContinuousCritic
-from stable_baselines3.common.preprocessing import get_action_dim
+from stable_baselines3.common.preprocessing import get_space_dim
 from stable_baselines3.common.torch_layers import (
     BaseFeaturesExtractor,
     CombinedExtractor,
@@ -79,7 +79,7 @@ class Actor(BasePolicy):
         self.full_std = full_std
         self.clip_mean = clip_mean
 
-        action_dim = get_action_dim(self.action_space)
+        action_dim = get_space_dim(self.action_space)
         latent_pi_net = create_mlp(features_dim, -1, net_arch, activation_fn)
         self.latent_pi = nn.Sequential(*latent_pi_net)
         last_layer_dim = net_arch[-1] if len(net_arch) > 0 else features_dim
