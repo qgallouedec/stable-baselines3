@@ -141,7 +141,7 @@ def get_space_shape(space: spaces.Space) -> Union[Tuple[int, ...], Dict[str, Tup
     if isinstance(space, spaces.Box):
         return space.shape
     elif isinstance(space, spaces.Discrete):
-        # Observation is an int
+        # Value is an int
         return (1,)
     elif isinstance(space, spaces.MultiDiscrete):
         # Number of discrete features
