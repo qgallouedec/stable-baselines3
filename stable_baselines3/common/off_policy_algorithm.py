@@ -131,6 +131,8 @@ class OffPolicyAlgorithm(BaseAlgorithm):
             replay_buffer_kwargs = {}
         self.replay_buffer_kwargs = replay_buffer_kwargs
         self._episode_storage = None
+        if self.n_envs is not None:
+            self._action_repeat = [None for _ in range(self.n_envs)]
 
         # Save train freq parameter, will be converted later to TrainFreq object
         self.train_freq = train_freq
@@ -142,6 +144,7 @@ class OffPolicyAlgorithm(BaseAlgorithm):
             self.policy_kwargs["use_sde"] = self.use_sde
         # For gSDE only
         self.use_sde_at_warmup = use_sde_at_warmup
+        self.surgeon = None
 
     def _convert_train_freq(self) -> None:
         """
@@ -178,34 +181,16 @@ class OffPolicyAlgorithm(BaseAlgorithm):
             else:
                 self.replay_buffer_class = ReplayBuffer
 
-        elif self.replay_buffer_class == HerReplayBuffer:
-            assert self.env is not None, "You must pass an environment when using `HerReplayBuffer`"
-
-            # If using offline sampling, we need a classic replay buffer too
-            if self.replay_buffer_kwargs.get("online_sampling", True):
-                replay_buffer = None
-            else:
-                replay_buffer = DictReplayBuffer(
-                    self.buffer_size,
-                    self.observation_space,
-                    self.action_space,
-                    device=self.device,
-                    optimize_memory_usage=self.optimize_memory_usage,
-                )
-
-            self.replay_buffer = HerReplayBuffer(
-                self.env,
-                self.buffer_size,
-                device=self.device,
-                replay_buffer=replay_buffer,
-                **self.replay_buffer_kwargs,
-            )
-
         if self.replay_buffer is None:
+            args = ()
+            if issubclass(self.replay_buffer_class, HerReplayBuffer):
+                assert self.env is not None, "You must pass an environment when using `HerReplayBuffer`"
+                args = (self.env,)
             self.replay_buffer = self.replay_buffer_class(
                 self.buffer_size,
                 self.observation_space,
                 self.action_space,
+                *args,
                 device=self.device,
                 n_envs=self.n_envs,
                 optimize_memory_usage=self.optimize_memory_usage,
@@ -277,12 +262,7 @@ class OffPolicyAlgorithm(BaseAlgorithm):
         # when using memory efficient replay buffer
         # see https://github.com/DLR-RM/stable-baselines3/issues/46
 
-        # Special case when using HerReplayBuffer,
-        # the classic replay buffer is inside it when using offline sampling
-        if isinstance(self.replay_buffer, HerReplayBuffer):
-            replay_buffer = self.replay_buffer.replay_buffer
-        else:
-            replay_buffer = self.replay_buffer
+        replay_buffer = self.replay_buffer
 
         truncate_last_traj = (
             self.optimize_memory_usage
@@ -327,6 +307,8 @@ class OffPolicyAlgorithm(BaseAlgorithm):
             tb_log_name,
             progress_bar,
         )
+        if self.surgeon is not None:
+            self.surgeon.setup(self)
 
         callback.on_training_start(locals(), globals())
 
@@ -366,6 +348,7 @@ class OffPolicyAlgorithm(BaseAlgorithm):
     def _sample_action(
         self,
         learning_starts: int,
+        action_repeat: List[Union[np.ndarray, None]],
         action_noise: Optional[ActionNoise] = None,
         n_envs: int = 1,
     ) -> Tuple[np.ndarray, np.ndarray]:
@@ -379,6 +362,7 @@ class OffPolicyAlgorithm(BaseAlgorithm):
             Required for deterministic policy (e.g. TD3). This can also be used
             in addition to the stochastic policy for SAC.
         :param learning_starts: Number of steps before learning for the warm-up phase.
+        :param action_repeat: Previous action, used for consistant exploration
         :param n_envs:
         :return: action to take in the environment
             and scaled action that will be stored in the replay buffer.
@@ -393,6 +377,15 @@ class OffPolicyAlgorithm(BaseAlgorithm):
             # we assume that the policy uses tanh to scale the action
             # We use non-deterministic action in the case of SAC, for TD3, it does not matter
             unscaled_action, _ = self.predict(self._last_obs, deterministic=False)
+
+        self._last_action = unscaled_action
+
+        for env_idx in range(self.n_envs):
+            if action_repeat[env_idx] is not None:
+                if np.random.random() > 0.1:
+                    unscaled_action[env_idx] = action_repeat[env_idx]
+                else:
+                    unscaled_action[env_idx] = self.action_space.sample()
 
         # Rescale the action from [low, high] to [-1, 1]
         if isinstance(self.action_space, gym.spaces.Box):
@@ -561,10 +554,11 @@ class OffPolicyAlgorithm(BaseAlgorithm):
                 self.actor.reset_noise(env.num_envs)
 
             # Select action randomly or according to policy
-            actions, buffer_actions = self._sample_action(learning_starts, action_noise, env.num_envs)
+            actions, buffer_actions = self._sample_action(learning_starts, self._action_repeat, action_noise, env.num_envs)
 
             # Rescale and perform action
             new_obs, rewards, dones, infos = env.step(actions)
+            self._action_repeat = [info.get("action_repeat") for info in infos]
 
             self.num_timesteps += env.num_envs
             num_collected_steps += 1
@@ -588,6 +582,9 @@ class OffPolicyAlgorithm(BaseAlgorithm):
             # For SAC/TD3, the update is dones as the same time as the gradient update
             # see https://github.com/hill-a/stable-baselines/issues/900
             self._on_step()
+
+            if self.surgeon is not None:
+                self.surgeon.on_step()
 
             for idx, done in enumerate(dones):
                 if done:

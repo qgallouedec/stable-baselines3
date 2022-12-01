@@ -9,6 +9,7 @@ from stable_baselines3.common.buffers import ReplayBuffer
 from stable_baselines3.common.noise import ActionNoise
 from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
 from stable_baselines3.common.policies import BasePolicy
+from stable_baselines3.common.surgeon import Surgeon
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
 from stable_baselines3.common.utils import get_parameters_by_name, polyak_update
 from stable_baselines3.td3.policies import CnnPolicy, MlpPolicy, MultiInputPolicy, TD3Policy
@@ -54,6 +55,7 @@ class TD3(OffPolicyAlgorithm):
         (smoothing noise)
     :param target_noise_clip: Limit for absolute value of target policy smoothing noise.
     :param policy_kwargs: additional arguments to be passed to the policy on creation
+    :param surgeon: an object than can modify actor loss, just before being backwarded
     :param verbose: Verbosity level: 0 for no output, 1 for info messages (such as device or wrappers used), 2 for
         debug messages
     :param seed: Seed for the pseudo random generators
@@ -89,6 +91,7 @@ class TD3(OffPolicyAlgorithm):
         target_noise_clip: float = 0.5,
         tensorboard_log: Optional[str] = None,
         policy_kwargs: Optional[Dict[str, Any]] = None,
+        surgeon: Optional[Surgeon] = None,
         verbose: int = 0,
         seed: Optional[int] = None,
         device: Union[th.device, str] = "auto",
@@ -123,6 +126,7 @@ class TD3(OffPolicyAlgorithm):
         self.policy_delay = policy_delay
         self.target_noise_clip = target_noise_clip
         self.target_policy_noise = target_policy_noise
+        self.surgeon = surgeon
 
         if _init_setup_model:
             self._setup_model()
@@ -135,6 +139,9 @@ class TD3(OffPolicyAlgorithm):
         self.critic_batch_norm_stats = get_parameters_by_name(self.critic, ["running_"])
         self.actor_batch_norm_stats_target = get_parameters_by_name(self.actor_target, ["running_"])
         self.critic_batch_norm_stats_target = get_parameters_by_name(self.critic_target, ["running_"])
+        if self.surgeon is not None:
+            self.actor.optimizer.add_param_group({"params": self.surgeon.parameters()})
+
 
     def _create_aliases(self) -> None:
         self.actor = self.policy.actor
@@ -155,6 +162,8 @@ class TD3(OffPolicyAlgorithm):
             self._n_updates += 1
             # Sample replay buffer
             replay_data = self.replay_buffer.sample(batch_size, env=self._vec_normalize_env)
+            if self.surgeon is not None:
+                replay_data = self.surgeon.modify_reward(replay_data)
 
             with th.no_grad():
                 # Select action according to policy and add clipped noise
@@ -163,8 +172,8 @@ class TD3(OffPolicyAlgorithm):
                 next_actions = (self.actor_target(replay_data.next_observations) + noise).clamp(-1, 1)
 
                 # Compute the next Q-values: min over all critics targets
-                next_q_values = th.cat(self.critic_target(replay_data.next_observations, next_actions), dim=1)
-                next_q_values, _ = th.min(next_q_values, dim=1, keepdim=True)
+                next_q_values = th.stack(self.critic_target(replay_data.next_observations, next_actions), dim=1)
+                next_q_values, _ = th.min(next_q_values, dim=1)
                 target_q_values = replay_data.rewards + (1 - replay_data.dones) * self.gamma * next_q_values
 
             # Get current Q-values estimates for each critic network
@@ -183,6 +192,8 @@ class TD3(OffPolicyAlgorithm):
             if self._n_updates % self.policy_delay == 0:
                 # Compute actor loss
                 actor_loss = -self.critic.q1_forward(replay_data.observations, self.actor(replay_data.observations)).mean()
+                if self.surgeon is not None:
+                    actor_loss = self.surgeon.modify_actor_loss(actor_loss, replay_data)
                 actor_losses.append(actor_loss.item())
 
                 # Optimize the actor
