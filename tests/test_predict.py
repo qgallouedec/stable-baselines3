@@ -37,17 +37,15 @@ class CustomSubClassedSpaceEnv(gym.Env):
 
 @pytest.mark.parametrize("model_class", MODEL_LIST)
 def test_auto_wrap(model_class):
-    # test auto wrapping of env into a VecEnv
-
+    """Test auto wrapping of env into a VecEnv."""
     # Use different environment for DQN
     if model_class is DQN:
-        env_name = "CartPole-v0"
+        env_name = "CartPole-v1"
     else:
         env_name = "Pendulum-v1"
     env = gym.make(env_name)
-    eval_env = gym.make(env_name)
     model = model_class("MlpPolicy", env)
-    model.learn(100, eval_env=eval_env)
+    model.learn(100)
 
 
 @pytest.mark.parametrize("model_class", MODEL_LIST)
@@ -73,11 +71,13 @@ def test_predict(model_class, env_id, device):
 
     obs = env.reset()
     action, _ = model.predict(obs)
+    assert isinstance(action, np.ndarray)
     assert action.shape == env.action_space.shape
     assert env.action_space.contains(action)
 
     vec_env_obs = vec_env.reset()
     action, _ = model.predict(vec_env_obs)
+    assert isinstance(action, np.ndarray)
     assert action.shape[0] == vec_env_obs.shape[0]
 
     # Special case for DQN to check the epsilon greedy exploration

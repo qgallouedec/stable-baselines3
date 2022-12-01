@@ -55,7 +55,7 @@ def test_squashed_gaussian(model_class):
 
 
 @pytest.fixture()
-def dummy_model_distribution_obs_and_actions() -> Tuple[A2C, np.array, np.array]:
+def dummy_model_distribution_obs_and_actions() -> Tuple[A2C, np.ndarray, np.ndarray]:
     """
     Fixture creating a Pendulum-v1 gym env, an A2C model and sampling 10 random observations and actions from the env
     :return: A2C model, random observations, random actions
@@ -77,6 +77,8 @@ def test_get_distribution(dummy_model_distribution_obs_and_actions):
         distribution = model.policy.get_distribution(observations)
         log_prob_2 = distribution.log_prob(actions)
         entropy_2 = distribution.entropy()
+        assert entropy_1 is not None
+        assert entropy_2 is not None
         assert th.allclose(log_prob_1, log_prob_2)
         assert th.allclose(entropy_1, entropy_2)
 

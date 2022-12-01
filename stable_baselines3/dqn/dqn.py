@@ -1,5 +1,5 @@
 import warnings
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar, Union
 
 import gym
 import numpy as np
@@ -11,8 +11,10 @@ from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
 from stable_baselines3.common.policies import BasePolicy
 from stable_baselines3.common.preprocessing import maybe_transpose
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
-from stable_baselines3.common.utils import get_linear_fn, is_vectorized_observation, polyak_update
+from stable_baselines3.common.utils import get_linear_fn, get_parameters_by_name, is_vectorized_observation, polyak_update
 from stable_baselines3.dqn.policies import CnnPolicy, DQNPolicy, MlpPolicy, MultiInputPolicy
+
+SelfDQN = TypeVar("SelfDQN", bound="DQN")
 
 
 class DQN(OffPolicyAlgorithm):
@@ -20,7 +22,7 @@ class DQN(OffPolicyAlgorithm):
     Deep Q-Network (DQN)
 
     Paper: https://arxiv.org/abs/1312.5602, https://www.nature.com/articles/nature14236
-    Default hyperparameters are taken from the nature paper,
+    Default hyperparameters are taken from the Nature paper,
     except for the optimizer and learning rate that were taken from Stable Baselines defaults.
 
     :param policy: The policy model to use (MlpPolicy, CnnPolicy, ...)
@@ -50,10 +52,9 @@ class DQN(OffPolicyAlgorithm):
     :param exploration_final_eps: final value of random action probability
     :param max_grad_norm: The maximum value for the gradient clipping
     :param tensorboard_log: the log location for tensorboard (if None, no logging)
-    :param create_eval_env: Whether to create a second environment that will be
-        used for evaluating the agent periodically. (Only available when passing string for the environment)
     :param policy_kwargs: additional arguments to be passed to the policy on creation
-    :param verbose: the verbosity level: 0 no output, 1 info, 2 debug
+    :param verbose: Verbosity level: 0 for no output, 1 for info messages (such as device or wrappers used), 2 for
+        debug messages
     :param seed: Seed for the pseudo random generators
     :param device: Device (cpu, cuda, ...) on which the code should be run.
         Setting it to auto, the code will be run on the GPU if possible.
@@ -78,7 +79,7 @@ class DQN(OffPolicyAlgorithm):
         gamma: float = 0.99,
         train_freq: Union[int, Tuple[int, str]] = 4,
         gradient_steps: int = 1,
-        replay_buffer_class: Optional[ReplayBuffer] = None,
+        replay_buffer_class: Optional[Type[ReplayBuffer]] = None,
         replay_buffer_kwargs: Optional[Dict[str, Any]] = None,
         optimize_memory_usage: bool = False,
         target_update_interval: int = 10000,
@@ -87,7 +88,6 @@ class DQN(OffPolicyAlgorithm):
         exploration_final_eps: float = 0.05,
         max_grad_norm: float = 10,
         tensorboard_log: Optional[str] = None,
-        create_eval_env: bool = False,
         policy_kwargs: Optional[Dict[str, Any]] = None,
         verbose: int = 0,
         seed: Optional[int] = None,
@@ -113,7 +113,6 @@ class DQN(OffPolicyAlgorithm):
             tensorboard_log=tensorboard_log,
             verbose=verbose,
             device=device,
-            create_eval_env=create_eval_env,
             seed=seed,
             sde_support=False,
             optimize_memory_usage=optimize_memory_usage,
@@ -140,6 +139,9 @@ class DQN(OffPolicyAlgorithm):
     def _setup_model(self) -> None:
         super()._setup_model()
         self._create_aliases()
+        # Copy running stats, see GH issue #996
+        self.batch_norm_stats = get_parameters_by_name(self.q_net, ["running_"])
+        self.batch_norm_stats_target = get_parameters_by_name(self.q_net_target, ["running_"])
         self.exploration_schedule = get_linear_fn(
             self.exploration_initial_eps,
             self.exploration_final_eps,
@@ -170,6 +172,8 @@ class DQN(OffPolicyAlgorithm):
         self._n_calls += 1
         if self._n_calls % self.target_update_interval == 0:
             polyak_update(self.q_net.parameters(), self.q_net_target.parameters(), self.tau)
+            # Copy running stats, see GH issue #996
+            polyak_update(self.batch_norm_stats, self.batch_norm_stats_target, 1.0)
 
         self.exploration_rate = self.exploration_schedule(self._current_progress_remaining)
         self.logger.record("rollout/exploration_rate", self.exploration_rate)
@@ -218,7 +222,7 @@ class DQN(OffPolicyAlgorithm):
 
     def predict(
         self,
-        observation: np.ndarray,
+        observation: Union[np.ndarray, Dict[str, np.ndarray]],
         state: Optional[Tuple[np.ndarray, ...]] = None,
         episode_start: Optional[np.ndarray] = None,
         deterministic: bool = False,
@@ -235,7 +239,7 @@ class DQN(OffPolicyAlgorithm):
         """
         if not deterministic and np.random.rand() < self.exploration_rate:
             if is_vectorized_observation(maybe_transpose(observation, self.observation_space), self.observation_space):
-                if isinstance(self.observation_space, gym.spaces.Dict):
+                if isinstance(observation, dict):
                     n_batch = observation[list(observation.keys())[0]].shape[0]
                 else:
                     n_batch = observation.shape[0]
@@ -247,28 +251,22 @@ class DQN(OffPolicyAlgorithm):
         return action, state
 
     def learn(
-        self,
+        self: SelfDQN,
         total_timesteps: int,
         callback: MaybeCallback = None,
         log_interval: int = 4,
-        eval_env: Optional[GymEnv] = None,
-        eval_freq: int = -1,
-        n_eval_episodes: int = 5,
         tb_log_name: str = "DQN",
-        eval_log_path: Optional[str] = None,
         reset_num_timesteps: bool = True,
-    ) -> OffPolicyAlgorithm:
+        progress_bar: bool = False,
+    ) -> SelfDQN:
 
         return super().learn(
             total_timesteps=total_timesteps,
             callback=callback,
             log_interval=log_interval,
-            eval_env=eval_env,
-            eval_freq=eval_freq,
-            n_eval_episodes=n_eval_episodes,
             tb_log_name=tb_log_name,
-            eval_log_path=eval_log_path,
             reset_num_timesteps=reset_num_timesteps,
+            progress_bar=progress_bar,
         )
 
     def _excluded_save_params(self) -> List[str]:

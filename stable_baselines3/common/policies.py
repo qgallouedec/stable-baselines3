@@ -2,10 +2,9 @@
 
 import collections
 import copy
-import warnings
 from abc import ABC, abstractmethod
 from functools import partial
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar, Union
 
 import gym
 import numpy as np
@@ -33,8 +32,10 @@ from stable_baselines3.common.torch_layers import (
 from stable_baselines3.common.type_aliases import Schedule
 from stable_baselines3.common.utils import get_device, is_vectorized_observation, obs_as_tensor
 
+SelfBaseModel = TypeVar("SelfBaseModel", bound="BaseModel")
 
-class BaseModel(nn.Module, ABC):
+
+class BaseModel(nn.Module):
     """
     The base model object: makes predictions in response to observations.
 
@@ -86,10 +87,6 @@ class BaseModel(nn.Module, ABC):
 
         self.features_extractor_class = features_extractor_class
         self.features_extractor_kwargs = features_extractor_kwargs
-
-    @abstractmethod
-    def forward(self, *args, **kwargs):
-        pass
 
     def _update_features_extractor(
         self,
@@ -162,7 +159,7 @@ class BaseModel(nn.Module, ABC):
         th.save({"state_dict": self.state_dict(), "data": self._get_constructor_parameters()}, path)
 
     @classmethod
-    def load(cls, path: str, device: Union[th.device, str] = "auto") -> "BaseModel":
+    def load(cls: Type[SelfBaseModel], path: str, device: Union[th.device, str] = "auto") -> SelfBaseModel:
         """
         Load model from path.
 
@@ -172,14 +169,6 @@ class BaseModel(nn.Module, ABC):
         """
         device = get_device(device)
         saved_variables = th.load(path, map_location=device)
-
-        # Allow to load policy saved with older version of SB3
-        if "sde_net_arch" in saved_variables["data"]:
-            warnings.warn(
-                "sde_net_arch is deprecated, please downgrade to SB3 v1.2.0 if you need such parameter.",
-                DeprecationWarning,
-            )
-            del saved_variables["data"]["sde_net_arch"]
 
         # Create policy object
         model = cls(**saved_variables["data"])  # pytype: disable=not-instantiable
@@ -255,7 +244,7 @@ class BaseModel(nn.Module, ABC):
         return observation, vectorized_env
 
 
-class BasePolicy(BaseModel):
+class BasePolicy(BaseModel, ABC):
     """The base policy object.
 
     Parameters are mostly the same as `BaseModel`; additions are documented below.
@@ -336,8 +325,8 @@ class BasePolicy(BaseModel):
 
         with th.no_grad():
             actions = self._predict(observation, deterministic=deterministic)
-        # Convert to numpy
-        actions = actions.cpu().numpy()
+        # Convert to numpy, and reshape to the original action shape
+        actions = actions.cpu().numpy().reshape((-1,) + self.action_space.shape)
 
         if isinstance(self.action_space, gym.spaces.Box):
             if self.squash_output:
@@ -350,7 +339,7 @@ class BasePolicy(BaseModel):
 
         # Remove batch dimension if needed
         if not vectorized_env:
-            actions = actions[0]
+            actions = actions.squeeze(axis=0)
 
         return actions, state
 
@@ -391,9 +380,6 @@ class ActorCriticPolicy(BasePolicy):
     :param log_std_init: Initial value for the log standard deviation
     :param full_std: Whether to use (n_features x n_actions) parameters
         for the std instead of only (n_features,) when using gSDE
-    :param sde_net_arch: Network architecture for extracting features
-        when using gSDE. If None, the latent features from the policy will be used.
-        Pass an empty list to use the states as features.
     :param use_expln: Use ``expln()`` function instead of ``exp()`` to ensure
         a positive standard deviation (cf paper). It allows to keep variance
         above zero and prevent it from growing too fast. In practice, ``exp()`` is usually enough.
@@ -421,7 +407,6 @@ class ActorCriticPolicy(BasePolicy):
         use_sde: bool = False,
         log_std_init: float = 0.0,
         full_std: bool = True,
-        sde_net_arch: Optional[List[int]] = None,
         use_expln: bool = False,
         squash_output: bool = False,
         features_extractor_class: Type[BaseFeaturesExtractor] = FlattenExtractor,
@@ -472,9 +457,6 @@ class ActorCriticPolicy(BasePolicy):
                 "use_expln": use_expln,
                 "learn_features": False,
             }
-
-        if sde_net_arch is not None:
-            warnings.warn("sde_net_arch is deprecated and will be removed in SB3 v2.4.0.", DeprecationWarning)
 
         self.use_sde = use_sde
         self.dist_kwargs = dist_kwargs
@@ -592,6 +574,7 @@ class ActorCriticPolicy(BasePolicy):
         distribution = self._get_action_dist_from_latent(latent_pi)
         actions = distribution.get_actions(deterministic=deterministic)
         log_prob = distribution.log_prob(actions)
+        actions = actions.reshape((-1,) + self.action_space.shape)
         return actions, values, log_prob
 
     def _get_action_dist_from_latent(self, latent_pi: th.Tensor) -> Distribution:
@@ -629,7 +612,7 @@ class ActorCriticPolicy(BasePolicy):
         """
         return self.get_distribution(observation).get_actions(deterministic=deterministic)
 
-    def evaluate_actions(self, obs: th.Tensor, actions: th.Tensor) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
+    def evaluate_actions(self, obs: th.Tensor, actions: th.Tensor) -> Tuple[th.Tensor, th.Tensor, Optional[th.Tensor]]:
         """
         Evaluate actions according to the current policy,
         given the observations.
@@ -645,7 +628,8 @@ class ActorCriticPolicy(BasePolicy):
         distribution = self._get_action_dist_from_latent(latent_pi)
         log_prob = distribution.log_prob(actions)
         values = self.value_net(latent_vf)
-        return values, log_prob, distribution.entropy()
+        entropy = distribution.entropy()
+        return values, log_prob, entropy
 
     def get_distribution(self, obs: th.Tensor) -> Distribution:
         """
@@ -685,9 +669,6 @@ class ActorCriticCnnPolicy(ActorCriticPolicy):
     :param log_std_init: Initial value for the log standard deviation
     :param full_std: Whether to use (n_features x n_actions) parameters
         for the std instead of only (n_features,) when using gSDE
-    :param sde_net_arch: Network architecture for extracting features
-        when using gSDE. If None, the latent features from the policy will be used.
-        Pass an empty list to use the states as features.
     :param use_expln: Use ``expln()`` function instead of ``exp()`` to ensure
         a positive standard deviation (cf paper). It allows to keep variance
         above zero and prevent it from growing too fast. In practice, ``exp()`` is usually enough.
@@ -715,7 +696,6 @@ class ActorCriticCnnPolicy(ActorCriticPolicy):
         use_sde: bool = False,
         log_std_init: float = 0.0,
         full_std: bool = True,
-        sde_net_arch: Optional[List[int]] = None,
         use_expln: bool = False,
         squash_output: bool = False,
         features_extractor_class: Type[BaseFeaturesExtractor] = NatureCNN,
@@ -734,7 +714,6 @@ class ActorCriticCnnPolicy(ActorCriticPolicy):
             use_sde,
             log_std_init,
             full_std,
-            sde_net_arch,
             use_expln,
             squash_output,
             features_extractor_class,
@@ -760,9 +739,6 @@ class MultiInputActorCriticPolicy(ActorCriticPolicy):
     :param log_std_init: Initial value for the log standard deviation
     :param full_std: Whether to use (n_features x n_actions) parameters
         for the std instead of only (n_features,) when using gSDE
-    :param sde_net_arch: Network architecture for extracting features
-        when using gSDE. If None, the latent features from the policy will be used.
-        Pass an empty list to use the states as features.
     :param use_expln: Use ``expln()`` function instead of ``exp()`` to ensure
         a positive standard deviation (cf paper). It allows to keep variance
         above zero and prevent it from growing too fast. In practice, ``exp()`` is usually enough.
@@ -790,7 +766,6 @@ class MultiInputActorCriticPolicy(ActorCriticPolicy):
         use_sde: bool = False,
         log_std_init: float = 0.0,
         full_std: bool = True,
-        sde_net_arch: Optional[List[int]] = None,
         use_expln: bool = False,
         squash_output: bool = False,
         features_extractor_class: Type[BaseFeaturesExtractor] = CombinedExtractor,
@@ -809,7 +784,6 @@ class MultiInputActorCriticPolicy(ActorCriticPolicy):
             use_sde,
             log_std_init,
             full_std,
-            sde_net_arch,
             use_expln,
             squash_output,
             features_extractor_class,
