@@ -142,7 +142,6 @@ class TD3(OffPolicyAlgorithm):
         if self.surgeon is not None:
             self.actor.optimizer.add_param_group({"params": self.surgeon.parameters()})
 
-
     def _create_aliases(self) -> None:
         self.actor = self.policy.actor
         self.actor_target = self.policy.actor_target
@@ -174,7 +173,9 @@ class TD3(OffPolicyAlgorithm):
                 # Compute the next Q-values: min over all critics targets
                 next_q_values = th.stack(self.critic_target(replay_data.next_observations, next_actions), dim=1)
                 next_q_values, _ = th.min(next_q_values, dim=1)
-                target_q_values = replay_data.rewards.squeeze(1) + (1 - replay_data.dones.squeeze(1)) * self.gamma * next_q_values
+                target_q_values = (
+                    replay_data.rewards.squeeze(1) + (1 - replay_data.dones.squeeze(1)) * self.gamma * next_q_values
+                )
 
             # Get current Q-values estimates for each critic network
             current_q_values = self.critic(replay_data.observations, replay_data.actions)

@@ -251,7 +251,9 @@ class SAC(OffPolicyAlgorithm):
                 # add entropy term
                 next_q_values = next_q_values - ent_coef * next_log_prob
                 # td error + entropy term
-                target_q_values = replay_data.rewards.squeeze(1) + (1 - replay_data.dones.squeeze(1)) * self.gamma * next_q_values
+                target_q_values = (
+                    replay_data.rewards.squeeze(1) + (1 - replay_data.dones.squeeze(1)) * self.gamma * next_q_values
+                )
 
             # Get current Q-values estimates for each critic network
             # using action from the replay buffer
