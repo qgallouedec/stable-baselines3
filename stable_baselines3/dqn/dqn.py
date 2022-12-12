@@ -192,9 +192,9 @@ class DQN(OffPolicyAlgorithm):
             if self.policy.categorical:
                 next_atoms = replay_data.rewards.unsqueeze(1) + (1 - replay_data.dones).unsqueeze(1) * self.gamma * self.policy.q_net.atoms
                 # Projection
-                tz = th.clamp(next_atoms, self.q_net.v_min, self.q_net.v_max)
                 delta_z = (self.q_net.v_max - self.q_net.v_min) / (self.q_net.n_atoms - 1)
-                b = (tz - self.q_net.v_min) / delta_z
+                b = (next_atoms - self.q_net.v_min) / delta_z
+                b = th.clamp(b, 0.0, self.q_net.n_atoms - 1)
                 l = b.floor()
                 u = b.ceil()
                 with th.no_grad():
