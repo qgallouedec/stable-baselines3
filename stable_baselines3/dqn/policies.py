@@ -36,6 +36,10 @@ class QNetwork(BasePolicy):
         net_arch: Optional[List[int]] = None,
         activation_fn: Type[nn.Module] = nn.ReLU,
         normalize_images: bool = True,
+        categorical: bool = False,
+        v_min: int = -10,
+        v_max: int = 10,
+        n_atoms: int = 51,
     ):
         super().__init__(
             observation_space,
@@ -53,7 +57,16 @@ class QNetwork(BasePolicy):
         self.features_dim = features_dim
         self.normalize_images = normalize_images
         action_dim = self.action_space.n  # number of actions
-        q_net = create_mlp(self.features_dim, action_dim, self.net_arch, self.activation_fn)
+        self.categorical = categorical
+        if self.categorical:
+            self.v_min = v_min
+            self.v_max = v_max
+            self.n_atoms = n_atoms
+            self.atoms = th.linspace(v_min, v_max, steps=n_atoms)
+            q_net = create_mlp(self.features_dim, action_dim * n_atoms, self.net_arch, self.activation_fn)
+            q_net.append(nn.Unflatten(-1, (action_dim, n_atoms)))
+        else:
+            q_net = create_mlp(self.features_dim, action_dim, self.net_arch, self.activation_fn)
         self.q_net = nn.Sequential(*q_net)
 
     def forward(self, obs: th.Tensor) -> th.Tensor:
@@ -63,7 +76,14 @@ class QNetwork(BasePolicy):
         :param obs: Observation
         :return: The estimated Q-Value for each action.
         """
-        return self.q_net(self.extract_features(obs))
+        if self.categorical:
+            probs = self.get_probs(obs)
+            return th.sum(probs * self.atoms, dim=-1)
+        else:
+            return self.q_net(self.extract_features(obs))
+
+    def get_probs(self, obs) -> th.Tensor:
+        return th.softmax(self.q_net(self.extract_features(obs)), dim=-1)
 
     def _predict(self, observation: th.Tensor, deterministic: bool = True) -> th.Tensor:
         q_values = self(observation)
@@ -117,6 +137,10 @@ class DQNPolicy(BasePolicy):
         normalize_images: bool = True,
         optimizer_class: Type[th.optim.Optimizer] = th.optim.Adam,
         optimizer_kwargs: Optional[Dict[str, Any]] = None,
+        categorical: bool = False,
+        v_min: int = -10,
+        v_max: int = 10,
+        n_atoms: int = 51,
     ):
         super().__init__(
             observation_space,
@@ -136,6 +160,7 @@ class DQNPolicy(BasePolicy):
         self.net_arch = net_arch
         self.activation_fn = activation_fn
         self.normalize_images = normalize_images
+        self.categorical = categorical
 
         self.net_args = {
             "observation_space": self.observation_space,
@@ -143,6 +168,10 @@ class DQNPolicy(BasePolicy):
             "net_arch": self.net_arch,
             "activation_fn": self.activation_fn,
             "normalize_images": normalize_images,
+            "categorical": categorical,
+            "v_min": v_min,
+            "v_max": v_max,
+            "n_atoms": n_atoms,
         }
 
         self.q_net, self.q_net_target = None, None
