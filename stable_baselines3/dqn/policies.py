@@ -62,7 +62,7 @@ class QNetwork(BasePolicy):
             self.v_min = v_min
             self.v_max = v_max
             self.n_atoms = n_atoms
-            self.atoms = th.linspace(v_min, v_max, steps=n_atoms)
+            self.register_buffer("atoms", th.linspace(v_min, v_max, steps=n_atoms))
             q_net = create_mlp(self.features_dim, action_dim * n_atoms, self.net_arch, self.activation_fn)
             q_net.append(nn.Unflatten(-1, (action_dim, n_atoms)))
         else:
