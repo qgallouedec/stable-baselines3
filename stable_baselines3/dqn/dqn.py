@@ -202,7 +202,7 @@ class DQN(OffPolicyAlgorithm):
 
                 q_values = th.sum(probs * self.q_net.atoms, dim=-1)
                 action = th.argmax(q_values, -1)
-                next_probs = probs[th.arange(action.shape[0]), action]
+                next_probs = probs[th.arange(batch_size), action]
                 # (l == u).float() handles the case where bj is exactly an integer
                 # example bj = 1, then the upper ceiling should be uj= 2, and lj= 1
                 d_m_l = (u + (l == u).float() - b) * next_probs
