@@ -193,7 +193,11 @@ class HerReplayBuffer(DictReplayBuffer):
 
         valid_inds = [np.arange(self.buffer_size)[is_valid[:, env_idx]] for env_idx in range(self.n_envs)]
         for i, env_idx in enumerate(env_indices):
-            batch_inds[i] = np.random.choice(valid_inds[env_idx])
+            try:
+                batch_inds[i] = np.random.choice(valid_inds[env_idx])
+            except:
+                print(env_indices, self.ep_length, is_valid, valid_inds)
+                raise ValueError()
 
         # Split the indexes between real and virtual transitions.
         nb_virtual = int(self.her_ratio * batch_size)
