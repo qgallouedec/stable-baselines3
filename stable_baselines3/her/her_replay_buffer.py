@@ -196,7 +196,7 @@ class HerReplayBuffer(DictReplayBuffer):
             try:
                 batch_inds[i] = np.random.choice(valid_inds[env_idx])
             except:
-                print(env_indices, self.ep_length, is_valid, valid_inds)
+                print(env_indices, self.ep_length, is_valid, valid_inds, self._current_ep_start, self.pos)
                 raise ValueError()
 
         # Split the indexes between real and virtual transitions.
