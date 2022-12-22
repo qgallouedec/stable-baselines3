@@ -93,6 +93,8 @@ class HerReplayBuffer(DictReplayBuffer):
         self._current_ep_start = np.zeros(self.n_envs, dtype=np.int64)
         self.ep_length = np.zeros((self.buffer_size, self.n_envs), dtype=np.int64)
 
+        self.valid_inds = [[] for _ in range(self.n_envs)]
+
     def __getstate__(self) -> Dict[str, Any]:
         """
         Gets state for pickling.
@@ -145,6 +147,8 @@ class HerReplayBuffer(DictReplayBuffer):
                 episode_end = episode_start + episode_length
                 episode_indices = np.arange(self.pos, episode_end) % self.buffer_size
                 self.ep_length[episode_indices, env_idx] = 0
+                for t in episode_indices:
+                    self.valid_inds[env_idx].remove(t)
 
         # Update episode start
         self.ep_start[self.pos] = self._current_ep_start.copy()
@@ -164,6 +168,7 @@ class HerReplayBuffer(DictReplayBuffer):
                     episode_end += self.buffer_size
                 episode = np.arange(episode_start, episode_end) % self.buffer_size
                 self.ep_length[episode, env_idx] = episode_end - episode_start
+                self.valid_inds[env_idx].extend(episode)
                 # Update the current episode start
                 self._current_ep_start[env_idx] = self.pos
                 if not self.online_sampling and not is_virtual:
@@ -188,16 +193,16 @@ class HerReplayBuffer(DictReplayBuffer):
         env_indices = np.random.randint(self.n_envs, size=batch_size)
         # When the buffer is full, we rewrite on old episodes. We don't want to
         # sample incomplete episode transitions, so we have to eliminate some indexes.
-        is_valid = self.ep_length > 0
-        valid_inds = [np.where(is_valid[:, env_idx])[0] for env_idx in range(self.n_envs)]
-
+        # is_valid = self.ep_length > 0
+        # valid_inds = [np.where(is_valid[:, env_idx])[0] for env_idx in range(self.n_envs)]
+        valid_inds = self.valid_inds
         sampled_valid_inds = np.random.randint([len(valid_inds[env_idx]) for env_idx in env_indices])
         batch_inds = np.zeros_like(env_indices)
         for i, (env_idx, sampled_valid_idx) in enumerate(zip(env_indices, sampled_valid_inds)):
             try:
                 batch_inds[i] = valid_inds[env_idx][sampled_valid_idx]
             except:
-                print(env_indices, self.ep_length, is_valid, valid_inds, self._current_ep_start, self.pos)
+                print(env_indices, self.ep_length, valid_inds, self._current_ep_start, self.pos)
                 raise ValueError()
 
         # Split the indexes between real and virtual transitions.
