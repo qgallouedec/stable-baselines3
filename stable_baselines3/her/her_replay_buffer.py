@@ -186,15 +186,16 @@ class HerReplayBuffer(DictReplayBuffer):
         :return: Samples
         """
         env_indices = np.random.randint(self.n_envs, size=batch_size)
-        batch_inds = np.zeros_like(env_indices)
         # When the buffer is full, we rewrite on old episodes. We don't want to
         # sample incomplete episode transitions, so we have to eliminate some indexes.
         is_valid = self.ep_length > 0
-
         valid_inds = [np.where(is_valid[:, env_idx])[0] for env_idx in range(self.n_envs)]
-        for i, env_idx in enumerate(env_indices):
+
+        sampled_valid_inds = np.random.randint([len(valid_inds[env_idx]) for env_idx in env_indices])
+        batch_inds = np.zeros_like(env_indices)
+        for i, (env_idx, sampled_valid_idx) in enumerate(zip(env_indices, sampled_valid_inds)):
             try:
-                batch_inds[i] = valid_inds[env_idx][np.random.randint(len(valid_inds[env_idx]))]
+                batch_inds[i] = valid_inds[env_idx][sampled_valid_idx]
             except:
                 print(env_indices, self.ep_length, is_valid, valid_inds, self._current_ep_start, self.pos)
                 raise ValueError()
