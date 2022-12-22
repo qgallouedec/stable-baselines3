@@ -463,7 +463,7 @@ def obs_as_tensor(
     if isinstance(obs, np.ndarray):
         return th.as_tensor(obs).to(device)
     elif isinstance(obs, dict):
-        return {key: th.as_tensor(_obs).to(device) for (key, _obs) in obs.items()}
+        return {key: th.as_tensor(_obs, device=device) for (key, _obs) in obs.items()}
     else:
         raise Exception(f"Unrecognized type of observation {type(obs)}")
 
