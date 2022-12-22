@@ -221,11 +221,11 @@ class SAC(OffPolicyAlgorithm):
                 # see https://github.com/rail-berkeley/softlearning/issues/60
                 ent_coef = th.exp(self.log_ent_coef.detach())
                 ent_coef_loss = -(self.log_ent_coef * (log_prob + self.target_entropy).detach()).mean()
-                ent_coef_losses.append(ent_coef_loss.item())
+                ent_coef_losses.append(ent_coef_loss)
             else:
                 ent_coef = self.ent_coef_tensor
 
-            ent_coefs.append(ent_coef.item())
+            ent_coefs.append(ent_coef)
 
             # Optimize entropy coefficient, also called
             # entropy temperature or alpha in the paper
@@ -251,7 +251,7 @@ class SAC(OffPolicyAlgorithm):
 
             # Compute critic loss
             critic_loss = 0.5 * sum(F.mse_loss(current_q, target_q_values) for current_q in current_q_values)
-            critic_losses.append(critic_loss.item())
+            critic_losses.append(critic_loss)
 
             # Optimize the critic
             self.critic.optimizer.zero_grad()
@@ -264,7 +264,7 @@ class SAC(OffPolicyAlgorithm):
             q_values_pi = th.cat(self.critic(replay_data.observations, actions_pi), dim=1)
             min_qf_pi, _ = th.min(q_values_pi, dim=1, keepdim=True)
             actor_loss = (ent_coef * log_prob - min_qf_pi).mean()
-            actor_losses.append(actor_loss.item())
+            actor_losses.append(actor_loss)
 
             # Optimize the actor
             self.actor.optimizer.zero_grad()
@@ -280,11 +280,11 @@ class SAC(OffPolicyAlgorithm):
         self._n_updates += gradient_steps
 
         self.logger.record("train/n_updates", self._n_updates, exclude="tensorboard")
-        self.logger.record("train/ent_coef", np.mean(ent_coefs))
-        self.logger.record("train/actor_loss", np.mean(actor_losses))
-        self.logger.record("train/critic_loss", np.mean(critic_losses))
+        self.logger.record("train/ent_coef", th.mean(th.tensor(ent_coefs)).item())
+        self.logger.record("train/actor_loss", th.mean(th.tensor(actor_losses)).item())
+        self.logger.record("train/critic_loss", th.mean(th.tensor(critic_losses)).item())
         if len(ent_coef_losses) > 0:
-            self.logger.record("train/ent_coef_loss", np.mean(ent_coef_losses))
+            self.logger.record("train/ent_coef_loss", th.mean(th.tensor(ent_coef_losses)).item())
 
     def learn(
         self: SelfSAC,
