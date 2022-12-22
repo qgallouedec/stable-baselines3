@@ -222,9 +222,8 @@ class PPO(OnPolicyAlgorithm):
                 policy_loss = -th.min(policy_loss_1, policy_loss_2).mean()
 
                 # Logging
-                pg_losses.append(policy_loss.item())
-                clip_fraction = th.mean((th.abs(ratio - 1) > clip_range).float()).item()
-                clip_fractions.append(clip_fraction)
+                pg_losses.append(policy_loss)
+                clip_fractions.append(th.mean((th.abs(ratio - 1) > clip_range).float()))
 
                 if self.clip_range_vf is None:
                     # No clipping
@@ -237,7 +236,7 @@ class PPO(OnPolicyAlgorithm):
                     )
                 # Value loss using the TD(gae_lambda) target
                 value_loss = F.mse_loss(rollout_data.returns, values_pred)
-                value_losses.append(value_loss.item())
+                value_losses.append(value_loss)
 
                 # Entropy loss favor exploration
                 if entropy is None:
@@ -246,7 +245,7 @@ class PPO(OnPolicyAlgorithm):
                 else:
                     entropy_loss = -th.mean(entropy)
 
-                entropy_losses.append(entropy_loss.item())
+                entropy_losses.append(entropy_loss)
 
                 loss = policy_loss + self.ent_coef * entropy_loss + self.vf_coef * value_loss
 
@@ -279,11 +278,11 @@ class PPO(OnPolicyAlgorithm):
         explained_var = explained_variance(self.rollout_buffer.values.flatten(), self.rollout_buffer.returns.flatten())
 
         # Logs
-        self.logger.record("train/entropy_loss", np.mean(entropy_losses))
-        self.logger.record("train/policy_gradient_loss", np.mean(pg_losses))
-        self.logger.record("train/value_loss", np.mean(value_losses))
+        self.logger.record("train/entropy_loss", th.mean(th.tensor(entropy_losses)).item())
+        self.logger.record("train/policy_gradient_loss", th.mean(th.tensor(pg_losses)).item())
+        self.logger.record("train/value_loss", th.mean(th.tensor(value_losses)).item())
         self.logger.record("train/approx_kl", np.mean(approx_kl_divs))
-        self.logger.record("train/clip_fraction", np.mean(clip_fractions))
+        self.logger.record("train/clip_fraction", th.mean(th.tensor(clip_fractions)).item())
         self.logger.record("train/loss", loss.item())
         self.logger.record("train/explained_variance", explained_var)
         if hasattr(self.policy, "log_std"):
