@@ -55,7 +55,6 @@ class QNetwork(BasePolicy):
         self.activation_fn = activation_fn
         self.features_extractor = features_extractor
         self.features_dim = features_dim
-        self.normalize_images = normalize_images
         action_dim = self.action_space.n  # number of actions
         self.categorical = categorical
         if self.categorical:
@@ -80,10 +79,10 @@ class QNetwork(BasePolicy):
             probs = self.get_probs(obs)
             return th.sum(probs * self.atoms, dim=-1)
         else:
-            return self.q_net(self.extract_features(obs))
+            return self.q_net(self.extract_features(obs, self.features_extractor))
 
     def get_probs(self, obs) -> th.Tensor:
-        return th.softmax(self.q_net(self.extract_features(obs)), dim=-1)
+        return th.softmax(self.q_net(self.extract_features(obs, self.features_extractor)), dim=-1)
 
     def _predict(self, observation: th.Tensor, deterministic: bool = True) -> th.Tensor:
         q_values = self(observation)
@@ -149,6 +148,7 @@ class DQNPolicy(BasePolicy):
             features_extractor_kwargs,
             optimizer_class=optimizer_class,
             optimizer_kwargs=optimizer_kwargs,
+            normalize_images=normalize_images,
         )
 
         if net_arch is None:
@@ -159,7 +159,6 @@ class DQNPolicy(BasePolicy):
 
         self.net_arch = net_arch
         self.activation_fn = activation_fn
-        self.normalize_images = normalize_images
         self.categorical = categorical
 
         self.net_args = {
