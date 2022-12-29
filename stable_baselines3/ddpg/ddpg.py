@@ -1,9 +1,12 @@
 from typing import Any, Dict, Optional, Tuple, Type, TypeVar, Union
 
+import numpy as np
 import torch as th
 
 from stable_baselines3.common.buffers import ReplayBuffer
 from stable_baselines3.common.noise import ActionNoise
+from stable_baselines3.common.off_policy_algorithm import OffPolicyAlgorithm
+from stable_baselines3.common.surgeon import Surgeon
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
 from stable_baselines3.td3.policies import TD3Policy
 from stable_baselines3.td3.td3 import TD3
@@ -71,6 +74,7 @@ class DDPG(TD3):
         optimize_memory_usage: bool = False,
         tensorboard_log: Optional[str] = None,
         policy_kwargs: Optional[Dict[str, Any]] = None,
+        surgeon: Optional[Surgeon] = None,
         verbose: int = 0,
         seed: Optional[int] = None,
         device: Union[th.device, str] = "auto",
@@ -92,6 +96,7 @@ class DDPG(TD3):
             replay_buffer_class=replay_buffer_class,
             replay_buffer_kwargs=replay_buffer_kwargs,
             policy_kwargs=policy_kwargs,
+            surgeon=surgeon,
             tensorboard_log=tensorboard_log,
             verbose=verbose,
             device=device,
