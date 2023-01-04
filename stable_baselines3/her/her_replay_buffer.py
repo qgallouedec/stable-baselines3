@@ -7,7 +7,7 @@ import torch as th
 from gym import spaces
 
 from stable_baselines3.common.buffers import DictReplayBuffer
-from stable_baselines3.common.type_aliases import DictReplayBufferSamples
+from stable_baselines3.common.type_aliases import DictReplayBufferSamples, TensorDict
 from stable_baselines3.common.vec_env import VecEnv, VecNormalize
 from stable_baselines3.her.goal_selection_strategy import KEY_TO_GOAL_STRATEGY, GoalSelectionStrategy
 
@@ -98,6 +98,7 @@ class HerReplayBuffer(DictReplayBuffer):
     def __getstate__(self) -> Dict[str, Any]:
         """
         Gets state for pickling.
+
         Excludes self.env, as in general Env's may not be pickleable.
         Note: when using offline sampling, this will also save the offline replay buffer.
         """
@@ -109,7 +110,9 @@ class HerReplayBuffer(DictReplayBuffer):
     def __setstate__(self, state: Dict[str, Any]) -> None:
         """
         Restores pickled state.
+
         User must call ``set_env()`` after unpickling before using.
+
         :param state:
         """
         self.__dict__.update(state)
@@ -119,6 +122,7 @@ class HerReplayBuffer(DictReplayBuffer):
     def set_env(self, env: VecEnv) -> None:
         """
         Sets the environment.
+
         :param env:
         """
         if self.env is not None:
@@ -128,8 +132,8 @@ class HerReplayBuffer(DictReplayBuffer):
 
     def add(
         self,
-        obs: Dict[str, np.ndarray],
-        next_obs: Dict[str, np.ndarray],
+        obs: TensorDict,
+        next_obs: TensorDict,
         action: np.ndarray,
         reward: np.ndarray,
         done: np.ndarray,
@@ -186,31 +190,23 @@ class HerReplayBuffer(DictReplayBuffer):
         Sample elements from the replay buffer.
 
         :param batch_size: Number of element to sample
-        :param env: associated gym VecEnv
+        :param env: Associated gym VecEnv
             to normalize the observations/rewards when sampling
         :return: Samples
         """
-        env_indices = np.random.randint(self.n_envs, size=batch_size)
         # When the buffer is full, we rewrite on old episodes. We don't want to
         # sample incomplete episode transitions, so we have to eliminate some indexes.
-        # is_valid = self.ep_length > 0
-        # valid_inds = [np.where(is_valid[:, env_idx])[0] for env_idx in range(self.n_envs)]
-        valid_inds = self.valid_inds
-        sampled_valid_inds = np.random.randint([len(valid_inds[env_idx]) for env_idx in env_indices])
-        batch_inds = np.zeros_like(env_indices)
-        for i, (env_idx, sampled_valid_idx) in enumerate(zip(env_indices, sampled_valid_inds)):
-            try:
-                batch_inds[i] = valid_inds[env_idx][sampled_valid_idx]
-            except:
-                print(env_indices, self.ep_length, valid_inds, self._current_ep_start, self.pos)
-                raise ValueError()
+        is_valid = self.ep_length > 0
+        valid_indices = np.flatnonzero(is_valid)
+        sampled_idx = np.random.choice(valid_indices, size=batch_size, replace=True)
+        batch_inds, env_indices = np.unravel_index(sampled_idx, is_valid.shape)
 
         # Split the indexes between real and virtual transitions.
         nb_virtual = int(self.her_ratio * batch_size)
         virtual_batch_inds, real_batch_inds = np.split(batch_inds, [nb_virtual])
         virtual_env_indices, real_env_indices = np.split(env_indices, [nb_virtual])
 
-        # get real and virtual data
+        # Get real and virtual data
         real_data = self._get_real_samples(real_batch_inds, real_env_indices, env)
         virtual_data = self._get_virtual_samples(virtual_batch_inds, virtual_env_indices, env)
 
@@ -278,7 +274,7 @@ class HerReplayBuffer(DictReplayBuffer):
                     {key: value[i].cpu().numpy() for key, value in data.next_observations.items()},
                     data.actions[i].cpu().numpy(),
                     data.rewards[i].cpu().numpy(),
-                    [dones[i]],
+                    np.expand_dims(dones[i], axis=0),
                     [infos[i]],
                     is_virtual=True,
                 )
@@ -296,8 +292,10 @@ class HerReplayBuffer(DictReplayBuffer):
         :return: Samples
         """
         # Normalize if needed and remove extra dimension (we are using only one env for now)
-        obs_ = self._normalize_obs({key: obs[batch_inds, env_indices] for key, obs in self.observations.items()})
-        next_obs_ = self._normalize_obs({key: obs[batch_inds, env_indices] for key, obs in self.next_observations.items()})
+        obs_ = self._normalize_obs({key: obs[batch_inds, env_indices, :] for key, obs in self.observations.items()}, env)
+        next_obs_ = self._normalize_obs(
+            {key: obs[batch_inds, env_indices, :] for key, obs in self.next_observations.items()}, env
+        )
 
         # Convert to torch tensor
         observations = {key: self.to_torch(obs) for key, obs in obs_.items()}
@@ -326,8 +324,8 @@ class HerReplayBuffer(DictReplayBuffer):
         :return: Samples, with new desired goals and new rewards
         """
         # Get infos and obs
-        obs = {key: obs[batch_inds, env_indices] for key, obs in self.observations.items()}
-        next_obs = {key: obs[batch_inds, env_indices] for key, obs in self.next_observations.items()}
+        obs = {key: obs[batch_inds, env_indices, :] for key, obs in self.observations.items()}
+        next_obs = {key: obs[batch_inds, env_indices, :] for key, obs in self.next_observations.items()}
         # For speed up we replace this
         # infos = copy.deepcopy(self.infos[batch_inds, env_indices])
         # by
@@ -352,15 +350,15 @@ class HerReplayBuffer(DictReplayBuffer):
             # so the next achieved_goal depends also on the previous state and action
             # because we are in a GoalEnv:
             # r_t = reward(s_t, a_t) = reward(next_achieved_goal, desired_goal)
-            # therefore we have to use next_obs["achived_goal"] and not obs["achived_goal"]
+            # therefore we have to use next_obs["achieved_goal"] and not obs["achieved_goal"]
             next_obs["achieved_goal"],
             infos,
             # we use the method of the first environment assuming that all environments are identical.
             indices=[0],
         )
         rewards = rewards[0].astype(np.float32)  # env_method returns a list containing one element
-        obs = self._normalize_obs(obs)
-        next_obs = self._normalize_obs(next_obs)
+        obs = self._normalize_obs(obs, env)
+        next_obs = self._normalize_obs(next_obs, env)
 
         # Convert to torch tensor
         observations = {key: self.to_torch(obs) for key, obs in obs.items()}
