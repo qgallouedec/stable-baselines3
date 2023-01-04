@@ -189,24 +189,50 @@ class DQN(OffPolicyAlgorithm):
             # Sample replay buffer
             replay_data = self.replay_buffer.sample(batch_size, env=self._vec_normalize_env)
 
-            with th.no_grad():
-                # Compute the next Q-values using the target network
-                next_q_values = self.q_net_target(replay_data.next_observations)
-                # Follow greedy policy: use the one with the highest value
-                next_q_values, _ = next_q_values.max(dim=1)
-                # Avoid potential broadcast issue
-                next_q_values = next_q_values.reshape(-1, 1)
-                # 1-step TD target
-                target_q_values = replay_data.rewards + (1 - replay_data.dones) * self.gamma * next_q_values
+            if self.policy.categorical:
+                next_atoms = replay_data.rewards.unsqueeze(1) + (1 - replay_data.dones).unsqueeze(1) * self.gamma * self.policy.q_net.atoms
+                # Projection
+                delta_z = (self.q_net.v_max - self.q_net.v_min) / (self.q_net.n_atoms - 1)
+                b = (next_atoms - self.q_net.v_min) / delta_z
+                b = th.clamp(b, 0.0, self.q_net.n_atoms - 1)
+                l = b.floor()
+                u = b.ceil()
+                with th.no_grad():
+                    probs = self.q_net_target.get_probs(replay_data.next_observations)
 
-            # Get current Q-values estimates
-            current_q_values = self.q_net(replay_data.observations)
+                q_values = th.sum(probs * self.q_net.atoms, dim=-1)
+                action = th.argmax(q_values, -1)
+                next_probs = probs[th.arange(batch_size), action]
+                # (l == u).float() handles the case where bj is exactly an integer
+                # example bj = 1, then the upper ceiling should be uj= 2, and lj= 1
+                d_m_l = (u + (l == u).float() - b) * next_probs
+                d_m_u = (b - l) * next_probs
+                target_probs = th.zeros_like(next_probs)
+                for i in range(target_probs.size(0)):
+                    target_probs[i].index_add_(0, l.long()[i], d_m_l[i])  # ml ← ml +pj(xt+1,a∗)(u − bj)
+                    target_probs[i].index_add_(0, u.long()[i], d_m_u[i])  # mu ← mu +pj(xt+1,a∗)(bj − l)
 
-            # Retrieve the q-values for the actions from the replay buffer
-            current_q_values = th.gather(current_q_values, dim=1, index=replay_data.actions.long())
+                probs = self.q_net.get_probs(replay_data.observations)[th.arange(batch_size), replay_data.actions]
 
-            # Compute Huber loss (less sensitive to outliers)
-            loss = F.smooth_l1_loss(current_q_values, target_q_values)
+                loss = th.mean(-th.sum((target_probs * th.log(probs + 1e-8)), dim=-1))
+            else:
+                with th.no_grad():
+                    # Compute the next Q-values using the target network
+                    next_q_values = self.q_net_target(replay_data.next_observations)
+                    # Follow greedy policy: use the one with the highest value
+                    next_q_values, _ = next_q_values.max(dim=1)
+                    # 1-step TD target
+                    target_q_values = replay_data.rewards + (1 - replay_data.dones) * self.gamma * next_q_values
+
+                # Get current Q-values estimates
+                current_q_values = self.q_net(replay_data.observations)
+
+                # Retrieve the q-values for the actions from the replay buffer
+                current_q_values = current_q_values[th.arange(current_q_values.shape[0]), replay_data.actions.long()]
+
+                # Compute Huber loss (less sensitive to outliers)
+                loss = F.smooth_l1_loss(current_q_values, target_q_values)
+            
             losses.append(loss.item())
 
             # Optimize the policy

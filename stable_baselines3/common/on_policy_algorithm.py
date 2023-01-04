@@ -184,10 +184,6 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             self._update_info_buffer(infos)
             n_steps += 1
 
-            if isinstance(self.action_space, spaces.Discrete):
-                # Reshape in case of discrete action
-                actions = actions.reshape(-1, 1)
-
             # Handle timeout by bootstraping with value function
             # see GitHub issue #633
             for idx, done in enumerate(dones):
