@@ -382,7 +382,7 @@ class OffPolicyAlgorithm(BaseAlgorithm):
 
         for env_idx in range(self.n_envs):
             if action_repeat[env_idx] is not None:
-                if np.random.random() > 0.1:
+                if np.random.random() > 1.0:
                     unscaled_action[env_idx] = action_repeat[env_idx]
                 else:
                     unscaled_action[env_idx] = self.action_space.sample()
@@ -596,9 +596,9 @@ class OffPolicyAlgorithm(BaseAlgorithm):
                         kwargs = dict(indices=[idx]) if env.num_envs > 1 else {}
                         action_noise.reset(**kwargs)
 
-                    # Log training infos
-                    if log_interval is not None and self._episode_num % log_interval == 0:
-                        self._dump_logs()
+            # Log training infos
+            if log_interval is not None and (self.num_timesteps // env.num_envs) % (log_interval // env.num_envs) == 0:
+                self._dump_logs()
         callback.on_rollout_end()
 
         return RolloutReturn(num_collected_steps * env.num_envs, num_collected_episodes, continue_training)
