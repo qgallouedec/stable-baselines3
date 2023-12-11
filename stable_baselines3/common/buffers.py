@@ -421,7 +421,24 @@ class RolloutBuffer(BaseBuffer):
         # Convert to numpy
         last_values = last_values.clone().cpu().numpy().flatten()
 
+        # Compute return (lambda=1.0)
         mc_advantages = np.zeros_like(self.advantages)
+        last_adv_est = 0
+        for step in reversed(range(self.buffer_size)):
+            if step == self.buffer_size - 1:
+                next_non_terminal = 1.0 - dones
+                next_values = last_values
+            else:
+                next_non_terminal = 1.0 - self.episode_starts[step + 1]
+                next_values = self.values[step + 1]
+            delta = self.rewards[step] + self.gamma * next_values * next_non_terminal - self.values[step]
+            last_adv_est = delta + self.gamma * next_non_terminal * last_adv_est
+            mc_advantages[step] = last_adv_est
+        # TD(lambda) estimator, see Github PR #375 or "Telescoping in TD(lambda)"
+        # in David Silver Lecture 4: https://www.youtube.com/watch?v=PnHCvfgC_ZA
+        self.returns = mc_advantages + self.values
+
+        # Compute advantage (lambda=0.95)
         last_gae_lam = 0
         for step in reversed(range(self.buffer_size)):
             if step == self.buffer_size - 1:
@@ -431,12 +448,8 @@ class RolloutBuffer(BaseBuffer):
                 next_non_terminal = 1.0 - self.episode_starts[step + 1]
                 next_values = self.values[step + 1]
             delta = self.rewards[step] + self.gamma * next_values * next_non_terminal - self.values[step]
-            mc_advantages[step] = delta + self.gamma * next_non_terminal * last_gae_lam
             last_gae_lam = delta + self.gamma * self.gae_lambda * next_non_terminal * last_gae_lam
             self.advantages[step] = last_gae_lam
-        # TD(lambda) estimator, see Github PR #375 or "Telescoping in TD(lambda)"
-        # in David Silver Lecture 4: https://www.youtube.com/watch?v=PnHCvfgC_ZA
-        self.returns = mc_advantages + self.values
 
     def add(
         self,
